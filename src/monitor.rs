@@ -354,7 +354,7 @@ pub fn log_path() -> PathBuf {
     config::var_dir().join("monitor.log")
 }
 
-fn log(message: &str) {
+pub fn log(message: &str) {
     let path = log_path();
     if fs::metadata(&path).is_ok_and(|m| m.len() > MAX_LOG) {
         let _ = fs::rename(&path, path.with_extension("log.1"));

@@ -171,6 +171,10 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 td.mono, .mono { font-family: var(--mono); font-size: 12.5px; }
 td.name-cell { white-space: normal; word-break: break-all; min-width: 200px; }
 td.actions { text-align: right; }
+/* the actions stay in view when a narrow window scrolls the table */
+th.actions, td.actions { position: sticky; right: 0; background: var(--surface); box-shadow: -8px 0 8px -8px rgba(0, 0, 0, .15); }
+th.actions { background: var(--surface-2); }
+tbody tr:hover td.actions { background: var(--surface-2); }
 tr.entry { cursor: pointer; }
 .entry-name { display: inline-flex; align-items: center; gap: 8px; }
 .entry-name svg { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -276,6 +280,20 @@ a.btn { text-decoration: none; color: inherit; }
 .row-actions { display: flex; gap: 8px; margin-top: 10px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .form-error { color: var(--crit); min-height: 1em; margin: 12px 0 0; }
+
+/* deletion queue */
+.del-cell { display: inline-flex; justify-content: center; min-width: 38px; margin-left: 6px; vertical-align: middle; }
+.lock { display: inline-grid; place-items: center; width: 30px; color: var(--muted); opacity: .6; cursor: help; }
+.lock svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.queue {
+  position: fixed; left: 16px; bottom: 16px; z-index: 9; width: min(440px, calc(100vw - 32px));
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .2); padding: 12px 14px;
+}
+.queue-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.queue-list { display: flex; flex-direction: column; gap: 6px; max-height: 40vh; overflow-y: auto; }
+.queue-item { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; font-size: 12.5px; }
+.queue-item .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* toasts */
 .toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }

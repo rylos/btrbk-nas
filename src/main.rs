@@ -18,13 +18,14 @@ mod source;
 use std::path::Path;
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: btrbk-nas setup | check [--dry-run] | notify-test | daemon | scan DIR | discover | version
+const USAGE: &str = "usage: btrbk-nas setup | check [--dry-run] | notify-test | daemon | scan DIR | delete DIR SNAPSHOT | discover | version
   setup     give this binary the capabilities it needs (as root, once
             after every install or upgrade of the package)
   check     run the periodic check once and print what it notifies;
             --dry-run sends nothing and leaves the saved state alone
   notify-test  send the test notification through DSM
   daemon    the periodic check, started by the package
+  delete    delete one snapshot of a target, if the chain does not need it
 Run by DSM's web server (GATEWAY_INTERFACE set) it answers the API.";
 
 fn main() -> ExitCode {
@@ -50,6 +51,18 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        ["delete", dir, name] => {
+            match snapshot::delete(Path::new(dir), name, &config::var_dir().join("delete.lock")) {
+                Ok(()) => {
+                    println!("deleted {dir}/{name}");
+                    ExitCode::SUCCESS
+                }
+                Err(reason) => {
+                    eprintln!("{dir}/{name}: {reason}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         ["discover"] => {
             for dir in snapshot::discover(Path::new("/")) {
                 println!("{}", dir.display());
@@ -111,7 +124,7 @@ fn setup() -> ExitCode {
     };
     match caps::install(&binary) {
         Ok(()) => {
-            println!("{}: cap_sys_admin and cap_dac_read_search set", binary.display());
+            println!("{}: cap_sys_admin, cap_dac_read_search and cap_dac_override set", binary.display());
             ExitCode::SUCCESS
         }
         Err(e) => {

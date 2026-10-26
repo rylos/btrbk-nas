@@ -51,6 +51,16 @@ const TEXTS = {
     source_error: "Elenco degli snapshot del PC non leggibile: {e}",
     full_send_banner: "{s}: nessuno snapshot in comune con {h}, il prossimo invio di btrbk sarà completo.",
     ev_full_send: "Prossimo invio completo",
+    delete: "Elimina", delete_old: "Elimina i vecchi ({n})", queue_title: "Coda eliminazioni",
+    q_waiting: "parte tra {s} s", q_deleting: "eliminazione…", q_done: "eliminato", q_error: "errore",
+    cancel_all: "Annulla tutto", clear: "Chiudi", undo: "Annulla", deletable: "Eliminabili",
+    leave_warning: "Ci sono eliminazioni in coda.",
+    del_parent: "È il prossimo parent: eliminarlo forzerebbe un invio completo.",
+    del_newer: "Più recente del parent: btrbk può ancora averne bisogno.",
+    del_unknown: "Il PC non invia l'elenco dei suoi snapshot: il parent non è noto.",
+    del_no_common: "Nessuno snapshot in comune con il PC: la catena è già rotta, non si tocca.",
+    del_receiving: "Ricezione incompleta di meno di un giorno: potrebbe essere ancora in corso.",
+    del_not_subvolume: "Non è un subvolume.",
     caps_title: "Permessi da attivare.",
     caps_text: "Dopo ogni installazione o aggiornamento del pacchetto, esegui una volta via SSH:",
     not_subvolume_banner: "{n} cartelle hanno il nome di uno snapshot ma non sono subvolume: btrbk non le riconosce, vanno controllate a mano.",
@@ -103,6 +113,16 @@ const TEXTS = {
     source_error: "The PC's snapshot list cannot be read: {e}",
     full_send_banner: "{s}: no snapshot in common with {h}, btrbk's next send will be a full one.",
     ev_full_send: "Next send is a full one",
+    delete: "Delete", delete_old: "Delete the old ones ({n})", queue_title: "Deletion queue",
+    q_waiting: "starts in {s} s", q_deleting: "deleting…", q_done: "deleted", q_error: "error",
+    cancel_all: "Cancel all", clear: "Close", undo: "Undo", deletable: "Deletable",
+    leave_warning: "Deletions are queued.",
+    del_parent: "The next parent: deleting it would force a full send.",
+    del_newer: "Newer than the parent: btrbk may still need it.",
+    del_unknown: "The PC does not send the list of its snapshots: the parent is unknown.",
+    del_no_common: "Nothing in common with the PC: the chain is already broken, left alone.",
+    del_receiving: "Interrupted receive less than a day old: it may still be running.",
+    del_not_subvolume: "Not a subvolume.",
     caps_title: "Permissions to enable.",
     caps_text: "After every install or upgrade of the package, run once over SSH:",
     not_subvolume_banner: "{n} folders are named like snapshots but are not subvolumes: btrbk does not recognise them, check them by hand.",
@@ -139,6 +159,8 @@ const ICONS = {
   download: '<svg viewBox="0 0 24 24"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg>',
   browse: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
   back: '<svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>',
+  trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg>',
+  lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
 };
 const icon = (name) => h("span", { html: ICONS[name], style: "display:contents" });
 
@@ -402,19 +424,19 @@ function snapshotTable(targetId, group) {
   return h("div", { class: "table-wrap" }, h("table", {},
     h("thead", {}, h("tr", {},
       h("th", {}, t("col_snapshot")), h("th", {}, t("col_taken")), h("th", {}, t("col_received")),
-      h("th", {}, t("col_duration")), h("th", {}, t("col_state")),
+      h("th", {}, t("col_state")),
       hasSource ? h("th", {}, t("on_pc")) : null,
       hasUsage ? h("th", {}, t("exclusive")) : null,
-      h("th", {}, t("col_uuid")), h("th", {}))),
+      h("th", {}, t("col_uuid")), h("th", { class: "actions" }))),
     h("tbody", {}, group.snapshots.map((snap) => {
       const info = snap.info || {};
       const taken = parseStamp(snap.timestamp);
-      return h("tr", {},
+      return h("tr", { "data-target": targetId, "data-name": snap.name, "data-deletion": snap.deletion },
         h("td", { class: "mono" }, snap.name,
           snap.name === parent ? h("span", { class: "pill accent tag" }, t("next_parent")) : null),
         h("td", {}, taken ? dateFmt.format(taken) : "—"),
-        h("td", {}, formatEpoch(info.rtime || info.otime)),
-        h("td", { class: "num" }, info.rtime && info.otime ? duration(info.rtime - info.otime) : "—"),
+        h("td", { title: info.rtime && info.otime ? `${t("col_duration")}: ${duration(info.rtime - info.otime)}` : "" },
+          formatEpoch(info.rtime || info.otime)),
         h("td", {}, snapshotState(snap)),
         hasSource ? h("td", {}, snap.on_source ? h("span", { class: "pill ok" }, t("yes")) : "—") : null,
         hasUsage ? h("td", { class: "num" }, bytes(snap.usage && snap.usage.exclusive)) : null,
@@ -423,8 +445,154 @@ function snapshotTable(targetId, group) {
           snap.problem === "not_subvolume" ? null : h("button", {
             class: "btn small",
             onclick: () => go({ target: targetId, group: group.summary.subvolume, snapshot: snap.name }),
-          }, icon("browse"), t("browse"))));
+          }, icon("browse"), t("browse")),
+          h("span", { class: "del-cell" }, deleteControl(targetId, snap))));
     }))));
+}
+
+/* ---------- deletion queue ---------- */
+
+// Clicks queue deletions without a dialog; each one waits GRACE_MS, during
+// which it can be undone, then they run one at a time. The NAS checks every
+// deletion again against the chain, whatever this page shows.
+const GRACE_MS = 5000;
+const queue = [];
+let queueRunning = false;
+let queueTimer = null;
+
+const queueKey = (target, name) => `${target}|${name}`;
+const queued = (target, name) => queue.find((q) => q.key === queueKey(target, name) && q.status !== "cancelled");
+const allowedDeletion = (snap) => snap.deletion === "allowed" || snap.deletion === "allowed_incomplete";
+
+const DELETION_REASON = {
+  parent: "del_parent", newer: "del_newer", parent_unknown: "del_unknown",
+  no_common_parent: "del_no_common", receiving: "del_receiving", not_subvolume: "del_not_subvolume",
+};
+
+function deleteControl(targetId, snap) {
+  const item = queued(targetId, snap.name);
+  if (item) return queueBadge(item);
+  if (!allowedDeletion(snap)) {
+    const reason = DELETION_REASON[snap.deletion];
+    return h("span", { class: "lock", title: reason ? t(reason) : "" }, icon("lock"));
+  }
+  return h("button", {
+    class: "btn small danger", title: t("delete"),
+    onclick: () => enqueue(targetId, snap.name),
+  }, icon("trash"));
+}
+
+function queueBadge(item) {
+  const cls = { waiting: "neutral", deleting: "accent", done: "ok", error: "critical" }[item.status];
+  const text = item.status === "waiting"
+    ? t("q_waiting", { s: Math.max(1, Math.ceil((item.due - Date.now()) / 1000)) })
+    : t(`q_${item.status}`);
+  return h("span", { class: `pill ${cls}`, title: item.error || "" }, text);
+}
+
+function enqueue(target, name) {
+  if (queued(target, name)) return;
+  queue.push({ key: queueKey(target, name), target, name, status: "waiting", due: Date.now() + GRACE_MS });
+  refreshQueueViews();
+  pumpQueue();
+}
+
+function cancelItem(item) {
+  if (item.status === "waiting") item.status = "cancelled";
+  refreshQueueViews();
+}
+
+async function pumpQueue() {
+  if (queueRunning) return;
+  clearTimeout(queueTimer);
+  const waiting = queue.filter((q) => q.status === "waiting");
+  if (!waiting.length) return;
+  const next = waiting.find((q) => q.due <= Date.now());
+  if (!next) {
+    // tick every second: the countdowns are on screen
+    queueTimer = setTimeout(() => { refreshQueueViews(); pumpQueue(); }, 1000);
+    return;
+  }
+  queueRunning = true;
+  next.status = "deleting";
+  refreshQueueViews();
+  try {
+    await api("delete", {}, { id: next.target, snapshot: next.name });
+    next.status = "done";
+  } catch (err) {
+    next.status = "error";
+    next.error = err.message;
+    toast(`${next.name}: ${err.message}`, true);
+  }
+  queueRunning = false;
+  refreshQueueViews();
+  if (queue.some((q) => q.status === "waiting")) {
+    pumpQueue();
+  } else {
+    // the queue is drained: show the target as it is now
+    state.detail = null;
+    await refresh();
+  }
+}
+
+/** Updates the delete cells of the table on screen and the queue panel. */
+function refreshQueueViews() {
+  for (const row of document.querySelectorAll("tr[data-name]")) {
+    const cell = row.querySelector(".del-cell");
+    const snap = { name: row.dataset.name, deletion: row.dataset.deletion };
+    if (cell) cell.replaceChildren(deleteControl(Number(row.dataset.target), snap));
+  }
+  const bulk = document.getElementById("bulk-delete");
+  if (bulk && bulkContext) bulk.replaceWith(bulkDelete(bulkContext.targetId, bulkContext.group));
+  renderQueuePanel();
+}
+
+function renderQueuePanel() {
+  let panel = document.getElementById("queue");
+  const visible = queue.filter((q) => q.status !== "cancelled");
+  if (!visible.length) {
+    if (panel) panel.remove();
+    return;
+  }
+  if (!panel) {
+    panel = h("div", { id: "queue", class: "queue" });
+    document.body.append(panel);
+  }
+  const busy = visible.some((q) => q.status === "waiting" || q.status === "deleting");
+  panel.replaceChildren(
+    h("div", { class: "queue-head" },
+      h("strong", {}, t("queue_title")),
+      busy
+        ? h("button", { class: "btn small", onclick: () => { visible.forEach(cancelItem); } }, t("cancel_all"))
+        : h("button", { class: "btn small", onclick: () => { queue.length = 0; renderQueuePanel(); } }, t("clear"))),
+    h("div", { class: "queue-list" }, visible.map((item) =>
+      h("div", { class: "queue-item" },
+        h("span", { class: "mono" }, item.name),
+        queueBadge(item),
+        item.status === "waiting" ? h("button", { class: "btn small", onclick: () => cancelItem(item) }, t("undo")) : null))));
+}
+
+window.addEventListener("beforeunload", (ev) => {
+  if (queue.some((q) => q.status === "waiting" || q.status === "deleting")) {
+    ev.preventDefault();
+    ev.returnValue = t("leave_warning");
+  }
+});
+
+let bulkContext = null;
+
+function bulkDelete(targetId, group) {
+  bulkContext = { targetId, group };
+  const old = group.snapshots.filter((s) => allowedDeletion(s) && !queued(targetId, s.name));
+  if (!old.length) return h("div", { id: "bulk-delete" });
+  // oldest first: if the queue is stopped half way, what is left is the newest
+  const names = old.map((s) => s.name).reverse();
+  return h("div", { id: "bulk-delete", class: "toolbar" }, h("span"),
+    h("button", {
+      class: "btn danger",
+      onclick: () => names.forEach((n) => enqueue(targetId, n)),
+    },
+      icon("trash"), t("delete_old", { n: old.length })));
 }
 
 const SETUP_COMMAND = "sudo /var/packages/btrbk-nas/target/bin/btrbk-nas setup";
@@ -493,6 +661,7 @@ async function renderTarget(route) {
           class: `tab${g.summary.subvolume === groupName ? " active" : ""}`,
           onclick: () => go({ target: route.target, group: g.summary.subvolume }),
         }, `${g.summary.subvolume} (${g.summary.count})`))),
+      bulkDelete(route.target, group),
       snapshotTable(route.target, group),
     ] : null,
   );
@@ -559,7 +728,7 @@ async function renderBrowse(route) {
     h("div", { class: "table-wrap" }, h("table", {},
       h("thead", {}, h("tr", {},
         h("th", {}, t("col_name")), h("th", {}, t("col_size")), h("th", {}, t("col_modified")),
-        h("th", {}, t("col_mode")), h("th", {}, t("col_owner")), h("th", {}))),
+        h("th", {}, t("col_mode")), h("th", {}, t("col_owner")), h("th", { class: "actions" }))),
       tbody)),
   );
 }

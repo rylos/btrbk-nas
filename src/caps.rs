@@ -1,4 +1,4 @@
-//! The two capabilities the package needs, and how they get there.
+//! The capabilities the package needs, and how they get there.
 //!
 //! DSM 7 refuses the `capabilities` field of conf/privilege in third-party
 //! packages ("invalid package privilege content", error 319), so the
@@ -15,12 +15,15 @@ use std::path::Path;
 const CAP_SYS_ADMIN: u32 = 21;
 /// Reading every file of a snapshot, whoever owns it.
 const CAP_DAC_READ_SEARCH: u32 = 2;
+/// Deleting a snapshot removes an entry from the target directory: the
+/// kernel wants write permission on it (btrfs_may_delete).
+const CAP_DAC_OVERRIDE: u32 = 1;
 
 const VFS_CAP_REVISION_2: u32 = 0x0200_0000;
 const VFS_CAP_FLAGS_EFFECTIVE: u32 = 0x1;
 
 fn mask() -> u64 {
-    (1 << CAP_SYS_ADMIN) | (1 << CAP_DAC_READ_SEARCH)
+    (1 << CAP_SYS_ADMIN) | (1 << CAP_DAC_READ_SEARCH) | (1 << CAP_DAC_OVERRIDE)
 }
 
 /// Whether this process holds both capabilities right now.
@@ -83,10 +86,10 @@ mod tests {
 
     #[test]
     fn xattr_matches_setcap() {
-        // `setcap cap_sys_admin,cap_dac_read_search+ep` writes exactly this
+        // `setcap cap_sys_admin,cap_dac_read_search,cap_dac_override+ep` writes exactly this
         assert_eq!(
             xattr_value(),
-            [0x01, 0, 0, 0x02, 0x04, 0, 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            [0x01, 0, 0, 0x02, 0x06, 0, 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         );
     }
 }

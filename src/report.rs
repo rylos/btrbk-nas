@@ -173,6 +173,7 @@ mod tests {
                 info: Some(info),
                 usage: None,
                 on_source: None,
+                deletion: Default::default(),
             }],
             chain: None,
         };

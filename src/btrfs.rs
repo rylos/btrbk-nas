@@ -19,6 +19,11 @@ const fn iowr(nr: u64, size: u64) -> u64 {
     (3 << 30) | (size << 16) | (IOC_MAGIC << 8) | nr
 }
 
+const fn iow(nr: u64, size: u64) -> u64 {
+    (1 << 30) | (size << 16) | (IOC_MAGIC << 8) | nr
+}
+
+const IOC_SNAP_DESTROY: u64 = iow(15, 4096);
 const IOC_TREE_SEARCH: u64 = iowr(17, 4096);
 const IOC_INO_LOOKUP: u64 = iowr(18, 4096);
 
@@ -66,6 +71,12 @@ struct InoLookupArgs {
     treeid: u64,
     objectid: u64,
     name: [u8; 4080],
+}
+
+#[repr(C)]
+struct VolArgs {
+    fd: i64,
+    name: [u8; 4088],
 }
 
 /// What the root tree knows about one subvolume.
@@ -274,6 +285,24 @@ pub fn root_id(dir: &File) -> io::Result<u64> {
     Ok(args.treeid)
 }
 
+/// Deletes the subvolume `name` inside the directory `parent`, as
+/// `btrfs subvolume delete` does. Needs CAP_SYS_ADMIN; the space is freed
+/// in the background by the filesystem.
+pub fn destroy_subvolume(parent: &File, name: &str) -> io::Result<()> {
+    if name.is_empty() || name.contains('/') || name == "." || name == ".." || name.len() >= 4088 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid subvolume name"));
+    }
+    // SAFETY: plain old data
+    let mut args: Box<VolArgs> = Box::new(unsafe { std::mem::zeroed() });
+    args.name[..name.len()].copy_from_slice(name.as_bytes());
+    // SAFETY: the kernel reads at most size_of::<VolArgs>() bytes
+    let rc = unsafe { libc::ioctl(parent.as_raw_fd(), IOC_SNAP_DESTROY as _, &*args) };
+    if rc < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
 /// Opens a directory for ioctls without following a final symlink.
 pub fn open_dir(path: &Path) -> io::Result<File> {
     use std::os::unix::fs::OpenOptionsExt;
@@ -328,6 +357,8 @@ mod tests {
 
     #[test]
     fn ioctl_numbers_match_the_kernel() {
+        assert_eq!(IOC_SNAP_DESTROY, 0x5000_940f);
+        assert_eq!(std::mem::size_of::<VolArgs>(), 4096);
         assert_eq!(IOC_TREE_SEARCH, 0xd000_9411);
         assert_eq!(IOC_INO_LOOKUP, 0xd000_9412);
         assert_eq!(std::mem::size_of::<SearchArgs>(), 4096);

@@ -106,7 +106,27 @@ fn save_settings(request: &Request, path: &Path) -> Result<Config, ApiError> {
     Ok(config)
 }
 
-/// Sends the test notification, to check DSM's channels end to end.
+/// Deletes one snapshot, if it may go: the checks run again on the NAS,
+/// whatever the interface showed.
+fn delete_snapshot(config: &Config, request: &Request, user: &str) -> Result<serde_json::Value, ApiError> {
+    #[derive(serde::Deserialize)]
+    struct Body {
+        id: usize,
+        snapshot: String,
+    }
+    let body: Body =
+        serde_json::from_slice(&request.body).map_err(|e| ApiError::bad_request(format!("invalid request: {e}")))?;
+    let target = config.targets.get(body.id).ok_or_else(|| ApiError::not_found("no such target"))?;
+    let lock = config::var_dir().join("delete.lock");
+    match snapshot::delete(&target.path, &body.snapshot, &lock) {
+        Ok(()) => {
+            monitor::log(&format!("{user} deleted {}/{}", target.path.display(), body.snapshot));
+            Ok(json!({ "deleted": body.snapshot }))
+        }
+        Err(reason) => Err(ApiError::new(409, reason)),
+    }
+}
+
 /// Sends the test notification with the channels as set in the form, saved
 /// or not, so they can be tried before saving.
 fn notify_test(request: &Request, user: &str) -> Result<serde_json::Value, ApiError> {
@@ -162,8 +182,9 @@ fn route(request: &Request, out: &mut impl Write) -> Result<(), ApiError> {
         ("POST", "settings") => cgi::json(out, 200, &save_settings(request, &config_path)?)?,
         ("POST", "discover") => cgi::json(out, 200, &discover())?,
         ("POST", "notify-test") => cgi::json(out, 200, &notify_test(request, &user)?)?,
+        ("POST", "delete") => cgi::json(out, 200, &delete_snapshot(&config, request, &user)?)?,
         ("GET", "monitor") => cgi::json(out, 200, &monitor_status(&config))?,
-        (_, "overview" | "target" | "browse" | "download" | "settings" | "discover" | "notify-test" | "monitor") => {
+        (_, "overview" | "target" | "browse" | "download" | "settings" | "discover" | "notify-test" | "monitor" | "delete") => {
             return Err(ApiError::new(405, "method not allowed"));
         }
         _ => return Err(ApiError::not_found("no such API")),

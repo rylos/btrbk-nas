@@ -19,6 +19,12 @@ reserved to the `administrators` group.
   btrbk calls them *garbled* and never uses them as a parent) and directories
   named like snapshots that are not subvolumes.
 - **Last 30 days**, one row per subvolume.
+- **Deleting old snapshots**, without breaking the chain: only those older
+  than the common parent, and interrupted receives more than a day old (a
+  younger one may still be running). A click queues a deletion; each waits 5
+  seconds, during which it can be undone, then they run one at a time. The NAS
+  checks every deletion again against fresh data, under a lock, whatever the
+  page showed. Without the PC's report only interrupted receives can go.
 - **File browser** inside any snapshot: owner, mode, size, symlinks shown but
   never followed; download of a file, or of a folder as a `.tar` stream.
 
@@ -127,8 +133,9 @@ unprivileged user. It execs the static `btrbk-nas` binary, which:
    is no base to build on;
 3. answers JSON, or streams a file or a `.tar`.
 
-The ioctls need `CAP_SYS_ADMIN`, and reading other users' files needs
-`CAP_DAC_READ_SEARCH`. DSM 7 runs third-party packages as their own user and
+The ioctls need `CAP_SYS_ADMIN`, reading other users' files needs
+`CAP_DAC_READ_SEARCH`, and deleting a snapshot - an entry of the target
+directory - needs `CAP_DAC_OVERRIDE`. DSM 7 runs third-party packages as their own user and
 refuses the `capabilities` field of `conf/privilege` for them (error 319,
 *invalid package privilege content*). So the package installs without
 privileges, and `btrbk-nas setup` (as root) writes the file capability on the
@@ -146,8 +153,9 @@ What the package deliberately does **not** do:
   7.4.1): the next parent comes from the PC's report above. Deleting snapshots
   stays with the chain-aware purge of
   [btrbk_tui](https://github.com/rylos/btrbk_tui).
-- **Nothing is deleted or written** to the backups. It only writes in the
-  package's own `var` directory: `config.json` (mode 0600, it can hold a
+- **Nothing is written** to the backups, and nothing is deleted except the
+  snapshots an administrator queues, with the checks above. It only writes in
+  the package's own `var` directory: `config.json` (mode 0600, it can hold a
   webhook token), `monitor-state.json`, `monitor.log`, `monitor.pid`.
 
 ## Development

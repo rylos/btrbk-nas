@@ -63,6 +63,69 @@ pub struct Snapshot {
     /// Whether the sending PC still holds this snapshot; None without a
     /// report from the PC.
     pub on_source: Option<bool>,
+    /// Whether it may be deleted from the NAS, and why not.
+    pub deletion: Deletion,
+}
+
+/// Whether a snapshot may be deleted from the NAS without hurting btrbk's
+/// incremental chain.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Deletion {
+    /// Older than the common parent: the chain no longer needs it.
+    Allowed,
+    /// An interrupted receive old enough not to be one still running:
+    /// btrbk never uses it.
+    AllowedIncomplete,
+    /// The common parent: deleting it would force a full send.
+    Parent,
+    /// Newer than the common parent.
+    Newer,
+    /// The PC sends no report of its snapshots: the parent is unknown.
+    #[default]
+    ParentUnknown,
+    /// The PC reports nothing in common: the chain is already broken, the
+    /// next send is a full one; left alone, like the purge scripts do.
+    NoCommonParent,
+    /// An interrupted receive less than a day old: it may still be running.
+    Receiving,
+    /// Not a subvolume: not btrbk's, never touched.
+    NotSubvolume,
+}
+
+impl Deletion {
+    pub fn allowed(self) -> bool {
+        matches!(self, Deletion::Allowed | Deletion::AllowedIncomplete)
+    }
+}
+
+/// An interrupted receive younger than this may be one still in progress: a
+/// full send of a large subvolume takes hours.
+pub const RECEIVE_GRACE_SECS: i64 = 24 * 3600;
+
+/// Decides, for every snapshot, whether it may be deleted.
+pub fn mark_deletion(groups: &mut [Group], now: i64) {
+    for group in groups {
+        let parent = group.chain.as_ref().map(|c| c.next_parent.clone());
+        let parent_index =
+            parent.as_ref().and_then(|p| p.as_ref()).and_then(|p| group.snapshots.iter().position(|s| &s.name == p));
+        for (i, snap) in group.snapshots.iter_mut().enumerate() {
+            snap.deletion = match (snap.problem, &parent, parent_index) {
+                (Some(Problem::NotSubvolume), _, _) => Deletion::NotSubvolume,
+                (Some(Problem::Incomplete), _, _) => {
+                    let started = snap.info.as_ref().map_or(now, |i| i.otime);
+                    if now - started >= RECEIVE_GRACE_SECS { Deletion::AllowedIncomplete } else { Deletion::Receiving }
+                }
+                (None, None, _) => Deletion::ParentUnknown,
+                (None, Some(None), _) => Deletion::NoCommonParent,
+                (None, Some(Some(_)), Some(p)) if i < p => Deletion::Newer,
+                (None, Some(Some(_)), Some(p)) if i == p => Deletion::Parent,
+                (None, Some(Some(_)), Some(_)) => Deletion::Allowed,
+                // the parent is always one of the group's snapshots
+                (None, Some(Some(_)), None) => Deletion::ParentUnknown,
+            };
+        }
+    }
 }
 
 /// The snapshots of one source subvolume, newest first.
@@ -169,7 +232,7 @@ pub fn analyse(
                         (info.received_uuid.is_none() || !info.readonly).then_some(Problem::Incomplete)
                     });
                     let usage = info.as_ref().and_then(|i| usage.get(&i.root_id).copied());
-                    Snapshot { name, timestamp, problem, info, usage, on_source: None }
+                    Snapshot { name, timestamp, problem, info, usage, on_source: None, deletion: Deletion::default() }
                 })
                 .collect();
             Group { subvolume, snapshots, chain: None }
@@ -250,7 +313,43 @@ pub fn scan(dir: &Path) -> std::io::Result<Scan> {
     if let Some(Ok(source)) = &scan.source {
         link_source(&mut scan.groups, source);
     }
+    mark_deletion(&mut scan.groups, crate::report::now());
     Ok(scan)
+}
+
+/// Deletes one snapshot of a target, after checking again, on fresh data,
+/// that it may go. Deletions are serialised with a lock: two browser windows
+/// cannot race each other.
+pub fn delete(dir: &Path, name: &str, lock: &Path) -> Result<(), String> {
+    if name.contains('/') || split_snapshot_name(name).is_none() {
+        return Err("not a snapshot name".into());
+    }
+    let lock = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(lock)
+        .map_err(|e| format!("cannot open the lock: {e}"))?;
+    // SAFETY: a valid descriptor; the lock goes with the file when dropped
+    if unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&lock), libc::LOCK_EX) } != 0 {
+        return Err(format!("cannot lock: {}", std::io::Error::last_os_error()));
+    }
+
+    let scan = scan(dir).map_err(|e| e.to_string())?;
+    if let Some(e) = scan.metadata_error {
+        return Err(format!("cannot read btrfs metadata: {e}"));
+    }
+    let snapshot = scan
+        .groups
+        .iter()
+        .flat_map(|g| &g.snapshots)
+        .find(|s| s.name == name)
+        .ok_or_else(|| "no such snapshot".to_string())?;
+    if !snapshot.deletion.allowed() {
+        return Err(format!("refused: {:?}", snapshot.deletion));
+    }
+    let parent = btrfs::open_dir(dir).map_err(|e| e.to_string())?;
+    btrfs::destroy_subvolume(&parent, name).map_err(|e| e.to_string())
 }
 
 /// Looks for btrbk target directories: a share, or a directory directly
@@ -345,6 +444,54 @@ mod tests {
             rtime: id as i64,
             ..SubvolInfo::default()
         }
+    }
+
+    #[test]
+    fn deletes_only_what_the_chain_does_not_need() {
+        let (d1, d2, d3, d4) = ("@.20261021", "@.20261022", "@.20261023", "@.20261024");
+        let names = vec![d4.to_string(), d3.to_string(), d2.to_string(), d1.to_string()];
+        let mut garbled = info(4, false, false);
+        garbled.otime = 1000;
+        let meta = HashMap::from([
+            (d4.to_string(), Ok(garbled)),
+            (d3.to_string(), Ok(info(3, true, true))),
+            (d2.to_string(), Ok(info(2, true, true))),
+            (d1.to_string(), Ok(info(1, true, true))),
+        ]);
+        let groups = || analyse(vec![("@".to_string(), names.clone())], &meta, &HashMap::new());
+        let deletion = |g: &Vec<Group>| g[0].snapshots.iter().map(|s| s.deletion).collect::<Vec<_>>();
+
+        // no report from the PC: only the old interrupted receive may go
+        let mut g = groups();
+        mark_deletion(&mut g, 1000 + RECEIVE_GRACE_SECS);
+        assert_eq!(
+            deletion(&g),
+            [Deletion::AllowedIncomplete, Deletion::ParentUnknown, Deletion::ParentUnknown, Deletion::ParentUnknown]
+        );
+        // a young interrupted receive may still be running
+        mark_deletion(&mut g, 1000 + 60);
+        assert_eq!(g[0].snapshots[0].deletion, Deletion::Receiving);
+
+        // the PC still holds d2 and d1: d2 is the parent, d1 may go, d3 stays
+        let source = crate::source::Source {
+            host: "PC".into(),
+            generated: 1,
+            snapshots: HashMap::from([("r-2".to_string(), d2.to_string()), ("r-1".to_string(), d1.to_string())]),
+        };
+        let mut g = groups();
+        link_source(&mut g, &source);
+        mark_deletion(&mut g, 1000 + RECEIVE_GRACE_SECS);
+        assert_eq!(
+            deletion(&g),
+            [Deletion::AllowedIncomplete, Deletion::Newer, Deletion::Parent, Deletion::Allowed]
+        );
+
+        // nothing in common: left alone
+        let lost = crate::source::Source { snapshots: HashMap::new(), ..source };
+        let mut g = groups();
+        link_source(&mut g, &lost);
+        mark_deletion(&mut g, 1000 + RECEIVE_GRACE_SECS);
+        assert_eq!(g[0].snapshots[1].deletion, Deletion::NoCommonParent);
     }
 
     #[test]
