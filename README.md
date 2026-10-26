@@ -184,3 +184,7 @@ only debug builds read. Point `target/devvar/config.json` at the fixture.
 | `src/auth.rs`, `src/caps.rs` | DSM login, file capabilities |
 | `ui/` | the interface (no build step, no dependencies) |
 | `spk/` | DSM package metadata |
+
+## License
+
+MIT, see [LICENSE](LICENSE).
