@@ -1,0 +1,9 @@
+[app]
+title="btrbk Backups"
+late_msg="Backup late: a PC has not sent a complete btrbk backup within the late threshold. Open btrbk Backups for the details."
+critical_msg="Backup critically late: a PC has not sent a complete btrbk backup within the critical threshold. Open btrbk Backups for the details."
+recovered_msg="Backup up to date again: a subvolume that was late has received a new complete backup."
+incomplete_msg="Incomplete receive: a btrbk transfer was interrupted. btrbk sends the snapshot again on its next run."
+error_msg="Backup folder unreadable: a btrbk backup folder cannot be read. Open btrbk Backups for the reason."
+full_send_msg="Next send complete: a PC has no snapshot in common with the NAS any more, btrbk will transfer everything again. Open btrbk Backups for the details."
+test_msg="Test notification: btrbk Backups notifications reach this DSM desktop."

@@ -1,0 +1,33 @@
+#!/bin/sh
+# Starts and stops the periodic check (btrbk-nas daemon). The interface
+# needs nothing running: DSM's web server serves it through ui/api.cgi.
+# Stopping the package in Package Center stops the notifications.
+
+BIN="/var/packages/btrbk-nas/target/bin/btrbk-nas"
+VAR="${SYNOPKG_PKGVAR:-/var/packages/btrbk-nas/var}"
+PID="$VAR/monitor.pid"
+
+running() {
+    [ -s "$PID" ] && kill -0 "$(cat "$PID")" 2>/dev/null
+}
+
+case "$1" in
+    start)
+        running && exit 0
+        "$BIN" daemon </dev/null >>"$VAR/monitor.log" 2>&1 &
+        echo $! >"$PID"
+        exit 0
+        ;;
+    stop)
+        running && kill "$(cat "$PID")"
+        rm -f "$PID"
+        exit 0
+        ;;
+    status)
+        running && exit 0
+        exit 3
+        ;;
+    *)
+        exit 1
+        ;;
+esac

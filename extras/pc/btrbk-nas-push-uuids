@@ -1,0 +1,77 @@
+#!/bin/bash
+# Tells btrbk-nas, on the NAS, which btrbk snapshots this PC still holds.
+#
+# btrbk's next incremental parent is the newest snapshot present on both
+# sides; the NAS alone cannot know which ones the PC kept. This writes the
+# list (name and UUID of each local snapshot) into the btrbk target directory
+# on the NAS, as the hidden file .btrbk-nas-source.
+#
+# Run as root after anything that changes the snapshots: every btrbk run
+# (btrbk-nas-push-uuids.conf, a drop-in for btrbk.service), a local purge,
+# btrbk_tui's purge and snapshot creation (its post_change_command setting).
+#
+# Where to look and where to send comes from btrbk's own configuration: the
+# first volume, its snapshot_dir, the first ssh:// target, ssh_user and
+# ssh_identity. Any of it can be overridden from the environment:
+#   BTRBK_NAS_POOL BTRBK_NAS_SNAPDIR BTRBK_NAS_HOST (user@host)
+#   BTRBK_NAS_PORT BTRBK_NAS_DIR BTRBK_NAS_IDENTITY
+set -euo pipefail
+
+conf=${BTRBK_CONF:-/etc/btrbk/btrbk.conf}
+
+# first value of a btrbk.conf option, comments and indentation ignored
+option() {
+    awk -v key="$1" '$1 == key { print $2; exit }' "$conf" 2>/dev/null || true
+}
+
+target=$(awk '$1 == "target" && $2 ~ /^ssh:\/\// { print $2; exit }
+              $1 == "target" && $3 ~ /^ssh:\/\// { print $3; exit }' "$conf" 2>/dev/null || true)
+rest=${target#ssh://}
+hostport=${rest%%/*}
+conf_host=${hostport%:*}
+conf_port=${hostport##*:}
+[ "$conf_port" = "$hostport" ] && conf_port=22
+conf_dir=/${rest#*/}
+
+pool=${BTRBK_NAS_POOL:-$(option volume)}
+snapdir=${BTRBK_NAS_SNAPDIR:-$(option snapshot_dir)}
+host=${BTRBK_NAS_HOST:-$(option ssh_user | sed 's/$/@/')$conf_host}
+port=${BTRBK_NAS_PORT:-$conf_port}
+dir=${BTRBK_NAS_DIR:-$conf_dir}
+identity=${BTRBK_NAS_IDENTITY:-$(option ssh_identity)}
+
+# btrbk's defaults: root over ssh, snapshots in the volume itself
+[ "${host#*@}" = "$host" ] && host="root@$host"
+if [ -z "$pool" ] || { [ -z "$target" ] && [ -z "${BTRBK_NAS_DIR:-}" ]; }; then
+    echo "btrbk-nas-push-uuids: no volume or ssh:// target in $conf" >&2
+    exit 1
+fi
+
+report=$(
+    printf '# btrbk-nas source v1\n'
+    printf 'host %s\n' "$(hostname)"
+    printf 'generated %s\n' "$(date +%s)"
+    # "ID 6670 gen ... uuid <uuid> path btrbk_snapshots/@home.20261023T0939"
+    btrfs subvolume list -u -s "$pool" | awk -v dir="${snapdir:+$snapdir/}" '
+        {
+            uuid = ""; path = ""
+            for (i = 1; i < NF; i++) {
+                if ($i == "uuid") uuid = $(i + 1)
+                if ($i == "path") { path = $(i + 1); break }
+            }
+            if (uuid != "" && (dir == "" || index(path, dir) == 1)) {
+                name = substr(path, length(dir) + 1)
+                if (name !~ /\//) print "snapshot " uuid " " name
+            }
+        }'
+)
+
+ssh_args=(-p "$port" -o BatchMode=yes -o ConnectTimeout=20)
+[ -n "$identity" ] && ssh_args+=(-i "$identity")
+
+# written to a temporary name and renamed: the NAS never reads half a file
+remote_dir=$(printf '%q' "$dir")
+# $remote_dir expands here on purpose: it is already quoted for the remote shell
+# shellcheck disable=SC2029
+printf '%s\n' "$report" | ssh "${ssh_args[@]}" "$host" \
+    "cat > $remote_dir/.btrbk-nas-source.tmp && mv -f $remote_dir/.btrbk-nas-source.tmp $remote_dir/.btrbk-nas-source"

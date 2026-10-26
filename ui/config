@@ -1,0 +1,26 @@
+{
+    "btrbk-nas.js": {
+        "SYNO.SDS.BtrbkNas.Instance": {
+            "type": "app",
+            "title": "btrbk Backups",
+            "desc": "btrbk backups received by this NAS",
+            "appWindow": "SYNO.SDS.BtrbkNas.Instance",
+            "icon": "images/icon_{0}.png",
+            "allUsers": false,
+            "allowMultiInstance": false,
+            "hidden": false,
+            "depend": [],
+            "texts": "texts",
+            "preloadTexts": [
+                "app:title",
+                "app:late_msg",
+                "app:critical_msg",
+                "app:recovered_msg",
+                "app:incomplete_msg",
+                "app:error_msg",
+                "app:full_send_msg",
+                "app:test_msg"
+            ]
+        }
+    }
+}

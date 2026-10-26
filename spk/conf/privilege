@@ -1,0 +1,11 @@
+{
+    "defaults": {
+        "run-as": "package"
+    },
+    "tool": [{
+        "relpath": "bin/btrbk-nas",
+        "user": "package",
+        "group": "package",
+        "permission": "0750"
+    }]
+}

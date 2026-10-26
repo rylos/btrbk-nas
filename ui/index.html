@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>btrbk Backups</title>
+<link rel="icon" href="images/icon_32.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img src="images/icon_32.png" alt="" width="28" height="28">
+    <span>btrbk Backups</span>
+  </div>
+  <div class="topbar-actions">
+    <span class="user" id="user"></span>
+    <button class="icon-btn" id="refresh" data-i18n-title="refresh" title="">
+      <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>
+    </button>
+    <button class="icon-btn" id="open-settings" data-i18n-title="settings" title="">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="sidebar" id="sidebar" aria-label="targets"></nav>
+  <main class="content" id="content">
+    <div class="placeholder"><div class="spinner"></div></div>
+  </main>
+</div>
+
+<dialog id="settings" class="dialog">
+  <form method="dialog" id="settings-form">
+    <h2 data-i18n="settings"></h2>
+    <section>
+      <h3 data-i18n="targets"></h3>
+      <p class="hint" data-i18n="targets_hint"></p>
+      <div id="target-rows" class="target-rows"></div>
+      <div class="row-actions">
+        <button type="button" class="btn" id="add-target" data-i18n="add_target"></button>
+        <button type="button" class="btn" id="discover" data-i18n="discover"></button>
+      </div>
+    </section>
+    <section>
+      <h3 data-i18n="thresholds"></h3>
+      <div class="thresholds">
+        <label><span data-i18n="warning_after"></span>
+          <input type="number" min="1" id="warning-hours" required> <span data-i18n="hours"></span></label>
+        <label><span data-i18n="critical_after"></span>
+          <input type="number" min="2" id="critical-hours" required> <span data-i18n="hours"></span></label>
+      </div>
+    </section>
+    <section>
+      <h3 data-i18n="notifications"></h3>
+      <label class="check strong"><input type="checkbox" id="n-enabled"> <span data-i18n="n_enabled"></span></label>
+      <div id="notify-options" class="notify-options">
+        <label class="inline"><span data-i18n="every"></span>
+          <input type="number" min="5" max="1440" id="n-interval"> <span data-i18n="minutes"></span></label>
+        <div class="subhead" data-i18n="events"></div>
+        <div class="checks">
+          <label class="check"><input type="checkbox" id="n-late"> <span data-i18n="ev_late"></span></label>
+          <label class="check"><input type="checkbox" id="n-critical"> <span data-i18n="ev_critical"></span></label>
+          <label class="check"><input type="checkbox" id="n-recovered"> <span data-i18n="ev_recovered"></span></label>
+          <label class="check"><input type="checkbox" id="n-incomplete"> <span data-i18n="ev_incomplete"></span></label>
+          <label class="check"><input type="checkbox" id="n-errors"> <span data-i18n="ev_errors"></span></label>
+          <label class="check"><input type="checkbox" id="n-full_send"> <span data-i18n="ev_full_send"></span></label>
+        </div>
+        <label class="inline"><span data-i18n="reminder"></span>
+          <input type="number" min="0" max="720" id="n-reminder"> <span data-i18n="hours"></span>
+          <span class="hint-inline" data-i18n="reminder_hint"></span></label>
+        <div class="subhead" data-i18n="channels"></div>
+        <label class="check"><input type="checkbox" id="n-desktop"> <span data-i18n="ch_desktop"></span>
+          <input type="text" id="n-recipient" class="recipient"></label>
+        <p class="hint" data-i18n="ch_desktop_hint"></p>
+        <label class="check"><input type="checkbox" id="n-webhook"> <span data-i18n="ch_webhook"></span></label>
+        <div class="webhook">
+          <label><span data-i18n="webhook_url"></span><input type="url" id="n-webhook-url" class="mono-input" placeholder="https://"></label>
+          <label><span data-i18n="webhook_body"></span><textarea id="n-webhook-body" class="mono-input" rows="2"></textarea></label>
+          <label class="inline"><span data-i18n="language"></span>
+            <select id="n-language"><option value="it">Italiano</option><option value="en">English</option></select></label>
+          <p class="hint" data-i18n="webhook_hint"></p>
+        </div>
+        <div class="row-actions">
+          <button type="button" class="btn" id="n-test" data-i18n="send_test"></button>
+        </div>
+      </div>
+      <p class="hint" id="monitor-status"></p>
+    </section>
+    <p class="form-error" id="settings-error"></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" id="settings-cancel" data-i18n="cancel"></button>
+      <button type="submit" class="btn primary" id="settings-save" data-i18n="save"></button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>

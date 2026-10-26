@@ -1,0 +1,9 @@
+[app]
+title="btrbk Backups"
+late_msg="Backup in ritardo: un PC non ha inviato un backup btrbk completo entro la soglia di ritardo. Apri btrbk Backups per i dettagli."
+critical_msg="Backup in ritardo critico: un PC non ha inviato un backup btrbk completo entro la soglia critica. Apri btrbk Backups per i dettagli."
+recovered_msg="Backup di nuovo aggiornato: un subvolume che era in ritardo ha ricevuto un nuovo backup completo."
+incomplete_msg="Ricezione incompleta: un trasferimento btrbk si è interrotto. btrbk rimanda lo snapshot al prossimo giro."
+error_msg="Cartella di backup non leggibile: una cartella di backup btrbk non è leggibile. Apri btrbk Backups per il motivo."
+full_send_msg="Prossimo invio completo: un PC non ha più snapshot in comune con il NAS, btrbk ritrasferirà tutto. Apri btrbk Backups per i dettagli."
+test_msg="Notifica di prova: le notifiche di btrbk Backups arrivano su questo desktop DSM."

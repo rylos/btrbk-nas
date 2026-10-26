@@ -1,0 +1,152 @@
+#!/bin/bash
+# Prunes the btrbk backups RECEIVED on the NAS without breaking the
+# incremental chain.
+#
+# These are the backups, not convenience snapshots: their normal rotation is
+# btrbk's job on the PC (target_preserve in btrbk.conf). This is for when space
+# has to be freed.
+#
+# Rule: the common parent - the newest snapshot present on both sides - stays,
+# with everything newer; anything older may go. Deleting the parent turns the
+# next btrbk run into a full send.
+#
+# Only the PC knows the parent. After every change to its snapshots it writes
+# .btrbk-nas-source into the target directory (extras/pc/btrbk-nas-push-uuids):
+# the list of its snapshots with their UUID, which is the received UUID of the
+# copy here. Without that list nothing is deleted.
+#
+# A stale list is no risk: it lacks the snapshots received since, so it names
+# an older parent and more is kept, never less. Its age is shown, not checked.
+
+set -euo pipefail
+
+btrfs_bin=/sbin/btrfs           # DSM's non-interactive PATH lacks /sbin
+# the target directory: where the script lives, unless -d says otherwise
+target=$(dirname "$(readlink -f "$0")")
+assume_yes=false
+dry_run=false
+
+usage() {
+    cat <<USAGE
+Usage: $(basename "$0") [options]
+
+Prunes the btrbk backups in a target directory, keeping the parent in common
+with the sending PC and everything newer.
+
+  -d, --dir DIR    target directory (default: the script's own, $target)
+  -n, --dry-run    show what would be deleted, delete nothing
+  -y, --yes        do not ask for confirmation
+  -h, --help       this message
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -d|--dir)     target="${2:?--dir needs a directory}"; shift ;;
+        -n|--dry-run) dry_run=true ;;
+        -y|--yes)     assume_yes=true ;;
+        -h|--help)    usage; exit 0 ;;
+        *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+    esac
+    shift
+done
+
+source_file="$target/.btrbk-nas-source"
+
+if [ "$EUID" -ne 0 ]; then
+    echo "Error: run it as root" >&2
+    exit 1
+fi
+if [ ! -d "$target" ]; then
+    echo "Error: no such directory: $target" >&2
+    exit 1
+fi
+if [ ! -f "$source_file" ]; then
+    echo "Error: $source_file is missing: the common parent is unknown, nothing deleted." >&2
+    echo "       On the PC: sudo /usr/local/bin/btrbk-nas-push-uuids" >&2
+    exit 1
+fi
+
+# UUIDs of the snapshots the PC still holds
+declare -A pc_uuid=()
+while read -r kind uuid _; do
+    [ "$kind" = snapshot ] && pc_uuid["$uuid"]=1
+done < "$source_file"
+host=$(awk '$1 == "host" { print $2; exit }' "$source_file")
+generated=$(awk '$1 == "generated" { print $2; exit }' "$source_file")
+age_hours=$(( ( $(date +%s) - ${generated:-0} ) / 3600 ))
+
+echo "Backups in: $target"
+echo "PC:         ${host:-?}, ${#pc_uuid[@]} snapshots, list from $age_hours hours ago"
+echo
+
+# subvolume names, from the snapshot names: "@home.20261026T0847" -> "@home"
+mapfile -t prefixes < <(
+    find "$target" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' 2>/dev/null |
+    sed -n 's/^\(.\+\)\.[0-9]\{8\}\([T_][0-9]\{4,6\}\)\?\([+-][0-9]\{4\}\)\?\(_[0-9]\+\)\?$/\1/p' | sort -u
+)
+
+to_delete=()
+for prefix in "${prefixes[@]}"; do
+    # btrbk timestamps sort chronologically
+    mapfile -t list < <(
+        find "$target" -maxdepth 1 -mindepth 1 -type d -name "$prefix.[0-9]*" | sort
+    )
+    [ "${#list[@]}" -eq 0 ] && continue
+
+    # the common parent: the newest whose received UUID the PC still holds
+    parent=-1
+    for i in "${!list[@]}"; do
+        ruuid=$("$btrfs_bin" subvolume show "${list[$i]}" 2>/dev/null |
+            awk '$1 == "Received" && $2 == "UUID:" { print $3 }')
+        [ -n "$ruuid" ] && [ -n "${pc_uuid[$ruuid]:-}" ] && parent=$i
+    done
+
+    if [ "$parent" -lt 0 ]; then
+        printf "  %-10s nothing in common with the PC: left alone\n" "$prefix"
+        continue
+    fi
+    printf "  %-10s %2d present, %2d kept, %2d deletable, parent %s\n" \
+        "$prefix" "${#list[@]}" "$(( ${#list[@]} - parent ))" "$parent" "$(basename "${list[$parent]}")"
+    [ "$parent" -gt 0 ] && to_delete+=("${list[@]:0:$parent}")
+done
+
+if [ "${#to_delete[@]}" -eq 0 ]; then
+    echo
+    echo "Nothing to delete."
+    exit 0
+fi
+
+echo
+echo "To delete:"
+printf "  - %s\n" "${to_delete[@]}"
+
+if [ "$dry_run" = true ]; then
+    echo
+    echo "(dry run: nothing changed)"
+    exit 0
+fi
+
+if [ "$assume_yes" = false ]; then
+    read -p "Delete them? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
+fi
+
+errors=0
+for sub in "${to_delete[@]}"; do
+    if ! "$btrfs_bin" subvolume delete --commit-after "$sub"; then
+        echo "Error deleting: $sub" >&2
+        errors=$((errors + 1))
+    fi
+done
+
+if [ "$errors" -eq 0 ]; then
+    echo "Done."
+else
+    echo "Done with $errors errors." >&2
+    exit 1
+fi
