@@ -701,7 +701,7 @@ function openInFileStation(path, isDir) {
 function fileStationButton(path, isDir, label) {
   const fsPath = fileStationPath(path);
   return fsPath === null ? null : h("button", {
-    class: "btn small", title: t("file_station"),
+    class: label ? "btn" : "btn small", title: t("file_station"),
     onclick: (ev) => { ev.stopPropagation(); openInFileStation(fsPath, isDir); },
   }, icon("share"), label || null);
 }

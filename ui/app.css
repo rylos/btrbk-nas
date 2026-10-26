@@ -219,6 +219,7 @@ a.btn { text-decoration: none; color: inherit; }
 .crumbs .sep { color: var(--muted); }
 .crumbs .current { font-family: var(--mono); font-weight: 600; padding: 2px 4px; }
 .toolbar { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; }
+.toolbar .filter { margin-right: auto; }
 .filter { padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); min-width: 220px; }
 
 /* banners and placeholders */

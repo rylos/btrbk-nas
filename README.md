@@ -8,6 +8,8 @@ file or a whole folder as `.tar`.
 It opens from DSM's main menu like any other app, uses the DSM login, and is
 reserved to the `administrators` group.
 
+![A backup target: the state of each subvolume and the last 30 days](docs/img/overview.png)
+
 ## What it shows
 
 - **One page per sending PC** (one btrbk target directory each), with a card per
@@ -32,6 +34,19 @@ Backup directories are found by themselves on first start: a share, or a
 directory inside a share, holding subvolumes named like btrbk snapshots. Each
 one can have its own thresholds (a PC that is not on every day) and its
 notifications switched off.
+
+<p align="center">
+  <img src="docs/img/snapshots.png" alt="The snapshots of a subvolume, with the next parent and a deletion queue" width="49%">
+  <img src="docs/img/browse.png" alt="The file browser inside a snapshot" width="49%">
+</p>
+<p align="center">
+  <img src="docs/img/settings.png" alt="Settings: backup folders, thresholds and notifications" width="49%">
+  <img src="docs/img/dark.png" alt="A late PC, in the dark theme" width="49%">
+</p>
+
+*Snapshots with the next parent and a deletion queue; the files inside a
+snapshot; settings; a late PC in the dark theme. The screenshots show made-up
+data: `tools/screenshots.sh` takes them again.*
 
 ## Next incremental parent
 
@@ -168,6 +183,8 @@ sudo tools/make-fixture.sh DIR              # loopback btrfs with received snaps
 cargo build && tools/devserver.py --sudo    # ui + CGI on http://127.0.0.1:8765
 sudo env SYNOPKG_PKGVAR=target/devvar target/debug/btrbk-nas check --dry-run
 sudo tools/make-fixture.sh -u DIR           # remove the fixture
+tools/devserver.py --demo                   # the ui on made-up data, no btrfs needed
+tools/screenshots.sh                        # the README screenshots, in headless Chromium
 ```
 
 The development server replaces the DSM login with `BTRBK_NAS_DEV_USER`, which
@@ -185,6 +202,7 @@ only debug builds read. Point `target/devvar/config.json` at the fixture.
 | `src/browse.rs` | path checks, listings, tar writer |
 | `src/auth.rs`, `src/caps.rs` | DSM login, file capabilities |
 | `ui/` | the interface (no build step, no dependencies) |
+| `tools/` | development server, btrfs fixture, demo data, screenshots |
 | `spk/` | DSM package metadata |
 
 ## License
