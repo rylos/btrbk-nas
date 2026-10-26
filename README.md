@@ -38,13 +38,15 @@ notifications switched off.
 btrbk's next send of a subvolume starts from the newest snapshot present on
 both sides. The NAS alone cannot know which snapshots the PC kept, so the PC
 tells it: after every btrbk run, `extras/pc/btrbk-nas-push-uuids` writes the
-name and UUID of each local snapshot into the target directory, as the hidden
-file `.btrbk-nas-source`. A PC snapshot's UUID is the received UUID of its copy
-on the NAS, which makes the match exact.
+name, UUID and creation time of each local snapshot into the target
+directory, as the hidden file `.btrbk-nas-source`. A PC snapshot's UUID is the
+received UUID of its copy on the NAS, which makes the match exact.
 
 With it the app shows, per subvolume, the next parent, the snapshots still
 to send and which ones the PC still holds, and warns (and can notify) when
 nothing is in common: the next send would transfer everything again.
+The creation time shows when each snapshot was taken, to the second; snapshots
+the PC no longer holds fall back to the minute in their name.
 
 On the PC, as root:
 

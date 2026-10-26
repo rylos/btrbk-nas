@@ -51,19 +51,25 @@ report=$(
     printf '# btrbk-nas source v1\n'
     printf 'host %s\n' "$(hostname)"
     printf 'generated %s\n' "$(date +%s)"
-    # "ID 6670 gen ... uuid <uuid> path btrbk_snapshots/@home.20261023T0939"
+    # "ID 6670 gen ... otime 2026-10-23 09:39:12 uuid <uuid> path btrbk_snapshots/@home.20261023T0939"
     btrfs subvolume list -u -s "$pool" | awk -v dir="${snapdir:+$snapdir/}" '
         {
-            uuid = ""; path = ""
+            uuid = ""; path = ""; otime = ""
             for (i = 1; i < NF; i++) {
+                if ($i == "otime") otime = $(i + 1) " " $(i + 2)
                 if ($i == "uuid") uuid = $(i + 1)
                 if ($i == "path") { path = $(i + 1); break }
             }
             if (uuid != "" && (dir == "" || index(path, dir) == 1)) {
                 name = substr(path, length(dir) + 1)
-                if (name !~ /\//) print "snapshot " uuid " " name
+                if (name !~ /\//) print uuid, name, otime
             }
-        }'
+        }' |
+    # the creation time, local time here, as unix seconds
+    while read -r uuid name otime; do
+        created=$(date -d "$otime" +%s 2>/dev/null) || created=
+        printf 'snapshot %s %s%s\n' "$uuid" "$name" "${created:+ $created}"
+    done
 )
 
 ssh_args=(-p "$port" -o BatchMode=yes -o ConnectTimeout=20)

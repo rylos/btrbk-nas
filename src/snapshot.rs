@@ -63,6 +63,9 @@ pub struct Snapshot {
     /// Whether the sending PC still holds this snapshot; None without a
     /// report from the PC.
     pub on_source: Option<bool>,
+    /// When the PC took it (unix seconds), to the second; None unless the
+    /// PC's report says.
+    pub created: Option<i64>,
     /// Whether it may be deleted from the NAS, and why not.
     pub deletion: Deletion,
 }
@@ -232,7 +235,7 @@ pub fn analyse(
                         (info.received_uuid.is_none() || !info.readonly).then_some(Problem::Incomplete)
                     });
                     let usage = info.as_ref().and_then(|i| usage.get(&i.root_id).copied());
-                    Snapshot { name, timestamp, problem, info, usage, on_source: None, deletion: Deletion::default() }
+                    Snapshot { name, timestamp, problem, info, usage, on_source: None, created: None, deletion: Deletion::default() }
                 })
                 .collect();
             Group { subvolume, snapshots, chain: None }
@@ -247,6 +250,7 @@ pub fn link_source(groups: &mut [Group], source: &crate::source::Source) {
         for snap in &mut group.snapshots {
             let uuid = snap.info.as_ref().and_then(|i| i.received_uuid.clone());
             snap.on_source = Some(uuid.as_ref().is_some_and(|u| source.snapshots.contains_key(u)));
+            snap.created = uuid.as_ref().and_then(|u| source.created.get(u).copied());
             received.extend(uuid);
         }
         let next_parent = group
@@ -477,6 +481,7 @@ mod tests {
             host: "PC".into(),
             generated: 1,
             snapshots: HashMap::from([("r-2".to_string(), d2.to_string()), ("r-1".to_string(), d1.to_string())]),
+            created: HashMap::from([("r-2".to_string(), 1_793_020_335)]),
         };
         let mut g = groups();
         link_source(&mut g, &source);
@@ -485,6 +490,8 @@ mod tests {
             deletion(&g),
             [Deletion::AllowedIncomplete, Deletion::Newer, Deletion::Parent, Deletion::Allowed]
         );
+        let created: Vec<_> = g[0].snapshots.iter().map(|s| s.created).collect();
+        assert_eq!(created, [None, None, Some(1_793_020_335), None]);
 
         // nothing in common: left alone
         let lost = crate::source::Source { snapshots: HashMap::new(), ..source };
@@ -514,6 +521,7 @@ mod tests {
                 ("pc-4".to_string(), d4.to_string()),
                 ("pc-x".to_string(), "@.20261024".to_string()),
             ]),
+            ..Default::default()
         };
         link_source(&mut groups, &source);
         let chain = groups[0].chain.as_ref().unwrap();

@@ -23,6 +23,10 @@ pub struct Source {
     /// Snapshot UUID on the PC -> snapshot name.
     #[serde(skip)]
     pub snapshots: HashMap<String, String>,
+    /// Snapshot UUID on the PC -> when it was taken there (unix seconds), to
+    /// the second; older reports leave it out.
+    #[serde(skip)]
+    pub created: HashMap<String, i64>,
 }
 
 pub fn parse(text: &str) -> Result<Source, String> {
@@ -38,8 +42,18 @@ pub fn parse(text: &str) -> Result<Source, String> {
             (Some("generated"), Some(epoch), None) => {
                 source.generated = epoch.parse().map_err(|_| format!("bad generated time: {epoch}"))?;
             }
-            (Some("snapshot"), Some(uuid), Some(name)) => {
+            (Some("snapshot"), Some(uuid), Some(rest)) => {
+                // "<name>" or "<name> <created>"
+                let (name, created) = match rest.split_once(' ') {
+                    Some((name, epoch)) => {
+                        (name, Some(epoch.parse().map_err(|_| format!("bad creation time: {epoch}"))?))
+                    }
+                    None => (rest, None),
+                };
                 source.snapshots.insert(uuid.to_string(), name.to_string());
+                if let Some(created) = created {
+                    source.created.insert(uuid.to_string(), created);
+                }
             }
             _ => return Err(format!("unexpected line: {line}")),
         }
@@ -65,7 +79,7 @@ host desktop
 generated 1793017000
 snapshot 11111111-0000-0000-0000-000000000001 @.20261026T0847
 snapshot 22222222-0000-0000-0000-000000000002 @home.20261026T0847
-snapshot 33333333-0000-0000-0000-000000000003 @home.20261026T1312
+snapshot 33333333-0000-0000-0000-000000000003 @home.20261026T1312 1793020335
 ";
 
     #[test]
@@ -75,11 +89,15 @@ snapshot 33333333-0000-0000-0000-000000000003 @home.20261026T1312
         assert_eq!(source.generated, 1_793_017_000);
         assert_eq!(source.snapshots["22222222-0000-0000-0000-000000000002"], "@home.20261026T0847");
         assert_eq!(source.snapshots.len(), 3);
+        assert_eq!(source.snapshots["33333333-0000-0000-0000-000000000003"], "@home.20261026T1312");
+        assert_eq!(source.created["33333333-0000-0000-0000-000000000003"], 1_793_020_335);
+        assert_eq!(source.created.len(), 1);
     }
 
     #[test]
     fn refuses_other_files() {
         assert!(parse("hello").is_err());
         assert!(parse("# btrbk-nas source v1\ngenerated soon\n").is_err());
+        assert!(parse("# btrbk-nas source v1\nsnapshot u @.20261026 soon\n").is_err());
     }
 }

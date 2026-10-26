@@ -15,11 +15,12 @@ const TEXTS = {
     no_targets: "Non ho trovato cartelle con snapshot btrbk. Aggiungine una dalle impostazioni.",
     open_settings: "Apri impostazioni", history: "Ultimi 30 giorni", subvolumes: "Subvolume",
     legend_ok: "snapshot ricevuto", legend_bad: "solo ricezioni incomplete", legend_none: "nessuno",
-    col_snapshot: "Snapshot", col_taken: "Creato sul PC", col_received: "Ricevuto", col_duration: "Durata",
+    col_snapshot: "Snapshot", col_taken: "Creato sul PC", col_received: "Ricevuto sul NAS", col_duration: "Durata",
     col_state: "Stato", col_uuid: "Received UUID", browse: "Sfoglia", state_ok: "Completo",
     state_incomplete: "Ricezione incompleta", state_not_subvolume: "Non è un subvolume",
     state_unknown: "Sconosciuto", col_name: "Nome", col_size: "Dimensione", col_modified: "Modificato",
     col_mode: "Permessi", col_owner: "UID:GID", download: "Scarica", download_dir: "Scarica cartella (.tar)",
+    file_station: "Apri in File Station",
     filter: "Filtra…", empty_dir: "Cartella vuota", truncated: "Elenco troncato a 10.000 voci.",
     session_expired: "Sessione DSM scaduta", session_hint: "Accedi di nuovo a DSM e riapri l'app.",
     forbidden: "Accesso negato", forbidden_hint: "Questa app è riservata agli amministratori.",
@@ -77,11 +78,12 @@ const TEXTS = {
     no_targets: "No folder with btrbk snapshots was found. Add one in the settings.",
     open_settings: "Open settings", history: "Last 30 days", subvolumes: "Subvolumes",
     legend_ok: "snapshot received", legend_bad: "incomplete receives only", legend_none: "none",
-    col_snapshot: "Snapshot", col_taken: "Taken on the PC", col_received: "Received", col_duration: "Duration",
+    col_snapshot: "Snapshot", col_taken: "Taken on the PC", col_received: "Received on the NAS", col_duration: "Duration",
     col_state: "State", col_uuid: "Received UUID", browse: "Browse", state_ok: "Complete",
     state_incomplete: "Incomplete receive", state_not_subvolume: "Not a subvolume",
     state_unknown: "Unknown", col_name: "Name", col_size: "Size", col_modified: "Modified",
     col_mode: "Mode", col_owner: "UID:GID", download: "Download", download_dir: "Download folder (.tar)",
+    file_station: "Open in File Station",
     filter: "Filter…", empty_dir: "Empty folder", truncated: "Listing cut at 10,000 entries.",
     session_expired: "DSM session expired", session_hint: "Sign in to DSM again and reopen the app.",
     forbidden: "Access denied", forbidden_hint: "This app is for administrators only.",
@@ -160,11 +162,13 @@ const ICONS = {
   browse: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
   back: '<svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>',
   trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg>',
+  share: '<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
   lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
 };
 const icon = (name) => h("span", { html: ICONS[name], style: "display:contents" });
 
 const dateFmt = new Intl.DateTimeFormat(LANG, { dateStyle: "medium", timeStyle: "short" });
+const secondFmt = new Intl.DateTimeFormat(LANG, { dateStyle: "medium", timeStyle: "medium" });
 const dayFmt = new Intl.DateTimeFormat(LANG, { day: "numeric" });
 const rtf = new Intl.RelativeTimeFormat(LANG, { numeric: "auto" });
 
@@ -417,13 +421,13 @@ function snapshotState(snap) {
   return h("span", { class: "pill neutral" }, t("state_unknown"));
 }
 
-function snapshotTable(targetId, group) {
+function snapshotTable(targetId, targetPath, group) {
   const hasUsage = group.snapshots.some((s) => s.usage);
   const hasSource = group.snapshots.some((s) => s.on_source !== null && s.on_source !== undefined);
   const parent = group.summary.chain && group.summary.chain.next_parent;
   return h("div", { class: "table-wrap" }, h("table", {},
     h("thead", {}, h("tr", {},
-      h("th", {}, t("col_snapshot")), h("th", {}, t("col_taken")), h("th", {}, t("col_received")),
+      h("th", {}, t("col_snapshot")), h("th", {}, t("col_taken")),
       h("th", {}, t("col_state")),
       hasSource ? h("th", {}, t("on_pc")) : null,
       hasUsage ? h("th", {}, t("exclusive")) : null,
@@ -434,9 +438,14 @@ function snapshotTable(targetId, group) {
       return h("tr", { "data-target": targetId, "data-name": snap.name, "data-deletion": snap.deletion },
         h("td", { class: "mono" }, snap.name,
           snap.name === parent ? h("span", { class: "pill accent tag" }, t("next_parent")) : null),
-        h("td", {}, taken ? dateFmt.format(taken) : "—"),
-        h("td", { title: info.rtime && info.otime ? `${t("col_duration")}: ${duration(info.rtime - info.otime)}` : "" },
-          formatEpoch(info.rtime || info.otime)),
+        // to the second when the PC reports it, else to the minute of the name;
+        // the receive on the NAS goes in the tooltip
+        h("td", {
+          title: [
+            info.rtime || info.otime ? `${t("col_received")}: ${secondFmt.format(new Date((info.rtime || info.otime) * 1000))}` : "",
+            info.rtime && info.otime ? `${t("col_duration")}: ${duration(info.rtime - info.otime)}` : "",
+          ].filter(Boolean).join("\n"),
+        }, snap.created ? secondFmt.format(new Date(snap.created * 1000)) : taken ? dateFmt.format(taken) : "—"),
         h("td", {}, snapshotState(snap)),
         hasSource ? h("td", {}, snap.on_source ? h("span", { class: "pill ok" }, t("yes")) : "—") : null,
         hasUsage ? h("td", { class: "num" }, bytes(snap.usage && snap.usage.exclusive)) : null,
@@ -446,6 +455,7 @@ function snapshotTable(targetId, group) {
             class: "btn small",
             onclick: () => go({ target: targetId, group: group.summary.subvolume, snapshot: snap.name }),
           }, icon("browse"), t("browse")),
+          snap.problem === "not_subvolume" ? null : fileStationButton(`${targetPath}/${snap.name}`, true),
           h("span", { class: "del-cell" }, deleteControl(targetId, snap))));
     }))));
 }
@@ -662,12 +672,39 @@ async function renderTarget(route) {
           onclick: () => go({ target: route.target, group: g.summary.subvolume }),
         }, `${g.summary.subvolume} (${g.summary.count})`))),
       bulkDelete(route.target, group),
-      snapshotTable(route.target, group),
+      snapshotTable(route.target, detail.path, group),
     ] : null,
   );
 }
 
 /* ---------- file browser ---------- */
+
+// File Station names paths by shared folder: /volume2/backup/x is /backup/x.
+// Outside a shared folder it has nothing to show, and no button appears.
+function fileStationPath(path) {
+  const m = /^\/volume[^/]+(\/[^/].*)$/.exec(path);
+  return m ? m[1].replace(/\/+$/, "") : null;
+}
+
+// Inside the DSM window the page asks the desktop to launch File Station; in a
+// plain tab it opens DSM with the same launch parameters.
+function openInFileStation(path, isDir) {
+  const openfile = isDir ? `${path}/` : path;
+  const app = "SYNO.SDS.App.FileStation3.Instance";
+  try {
+    const sds = window.parent !== window && window.parent.SYNO && window.parent.SYNO.SDS;
+    if (sds && sds.AppLaunch) return sds.AppLaunch(app, { openfile });
+  } catch (e) { /* not inside DSM */ }
+  window.open(`/?launchApp=${app}&launchParam=${encodeURIComponent(`openfile=${encodeURIComponent(openfile)}`)}`, "_blank");
+}
+
+function fileStationButton(path, isDir, label) {
+  const fsPath = fileStationPath(path);
+  return fsPath === null ? null : h("button", {
+    class: "btn small", title: t("file_station"),
+    onclick: (ev) => { ev.stopPropagation(); openInFileStation(fsPath, isDir); },
+  }, icon("share"), label || null);
+}
 
 async function renderBrowse(route) {
   showLoading();
@@ -687,6 +724,7 @@ async function renderBrowse(route) {
 
   const download = (path) => apiUrl("download", { id: route.target, snapshot: route.snapshot, path });
   const join = (name) => (route.path ? `${route.path}/${name}` : name);
+  const base = `${detail.path}/${route.snapshot}`;
 
   const tbody = h("tbody");
   const fill = (filter) => {
@@ -710,6 +748,9 @@ async function renderBrowse(route) {
               title: e.kind === "dir" ? t("download_dir") : t("download"),
               onclick: (ev) => ev.stopPropagation(),
             }, icon("download"), e.kind === "dir" ? ".tar" : "")
+            : null,
+          e.kind === "file" || e.kind === "dir"
+            ? fileStationButton(`${base}/${join(e.name)}`, e.kind === "dir")
             : null));
     });
     tbody.replaceChildren(...(rows.length ? rows : [h("tr", {}, h("td", { colspan: 6, class: "muted" }, t("empty_dir")))]));
@@ -723,6 +764,7 @@ async function renderBrowse(route) {
     crumbs,
     h("div", { class: "toolbar" },
       h("input", { class: "filter", type: "search", placeholder: t("filter"), oninput: (ev) => fill(ev.target.value) }),
+      fileStationButton(route.path ? `${base}/${route.path}` : base, true, t("file_station")),
       h("a", { class: "btn", href: download(route.path), download: "" }, icon("download"), t("download_dir"))),
     listing.truncated ? h("div", { class: "banner warning" }, t("truncated")) : null,
     h("div", { class: "table-wrap" }, h("table", {},

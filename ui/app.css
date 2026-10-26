@@ -171,6 +171,7 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 td.mono, .mono { font-family: var(--mono); font-size: 12.5px; }
 td.name-cell { white-space: normal; word-break: break-all; min-width: 200px; }
 td.actions { text-align: right; }
+td.actions .btn + .btn { margin-left: 6px; }
 /* the actions stay in view when a narrow window scrolls the table */
 th.actions, td.actions { position: sticky; right: 0; background: var(--surface); box-shadow: -8px 0 8px -8px rgba(0, 0, 0, .15); }
 th.actions { background: var(--surface-2); }
