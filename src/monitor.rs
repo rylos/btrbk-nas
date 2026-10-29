@@ -233,38 +233,51 @@ impl Event {
     /// The full text, for the webhook. The desktop only takes the package's
     /// fixed translated strings, so it cannot carry these details.
     pub fn text(&self, language: &str) -> String {
-        let it = language == "it";
+        use crate::lang::t;
+        // in the webhook's language, whatever the request asked for
+        let previous = crate::lang::code();
+        crate::lang::set(Some(language));
         let hours = self.hours.map(|h| h.to_string()).unwrap_or_else(|| "?".into());
         let (s, t) = (&self.subvolume, &self.target);
-        let text = match (self.kind, it) {
-            (Kind::Late, true) => format!("Backup di {s} da {t} in ritardo: l'ultimo completo è di {hours} ore fa."),
-            (Kind::Late, false) => format!("Backup of {s} from {t} is late: the last complete one is {hours} hours old."),
-            (Kind::Critical, true) => format!("Nessun backup completo di {s} da {t} da {hours} ore."),
-            (Kind::Critical, false) => format!("No complete backup of {s} from {t} for {hours} hours."),
-            (Kind::Recovered, true) => format!("Il backup di {s} da {t} è di nuovo aggiornato."),
-            (Kind::Recovered, false) => format!("The backup of {s} from {t} is up to date again."),
-            (Kind::Incomplete, true) => {
-                format!("{} nuove ricezioni incomplete di {s} da {t}: btrbk le rimanda al prossimo giro.", self.count)
-            }
-            (Kind::Incomplete, false) => {
-                format!("{} new incomplete receive(s) of {s} from {t}: btrbk sends them again next time.", self.count)
-            }
-            (Kind::Error, true) => format!("I backup di {t} non sono leggibili: {}", self.detail),
-            (Kind::Error, false) => format!("The backups of {t} cannot be read: {}", self.detail),
-            (Kind::FullSend, true) => format!(
-                "{t} non ha più snapshot di {s} in comune con il NAS: il prossimo invio di btrbk sarà completo."
+        let text = match self.kind {
+            Kind::Late => t!(
+                "Backup di {} da {} in ritardo: l'ultimo completo è di {} ore fa.",
+                "Backup of {} from {} is late: the last complete one is {} hours old.",
+                s,
+                t,
+                hours
             ),
-            (Kind::FullSend, false) => {
-                format!("{t} has no snapshot of {s} in common with the NAS any more: btrbk's next send will be a full one.")
+            Kind::Critical => {
+                t!("Nessun backup completo di {} da {} da {} ore.", "No complete backup of {} from {} for {} hours.", s, t, hours)
             }
-            (Kind::Test, true) => format!("Notifica di prova inviata da {t}."),
-            (Kind::Test, false) => format!("Test notification sent by {t}."),
+            Kind::Recovered => {
+                t!("Il backup di {} da {} è di nuovo aggiornato.", "The backup of {} from {} is up to date again.", s, t)
+            }
+            Kind::Incomplete if self.count == 1 => t!(
+                "Una nuova ricezione incompleta di {} da {}: btrbk la rimanda al prossimo giro.",
+                "A new incomplete receive of {} from {}: btrbk sends it again next time.",
+                s,
+                t
+            ),
+            Kind::Incomplete => t!(
+                "{} nuove ricezioni incomplete di {} da {}: btrbk le rimanda al prossimo giro.",
+                "{} new incomplete receives of {} from {}: btrbk sends them again next time.",
+                self.count,
+                s,
+                t
+            ),
+            Kind::Error => t!("I backup di {} non sono leggibili: {}", "The backups of {} cannot be read: {}", t, self.detail),
+            Kind::FullSend => t!(
+                "{} non ha più snapshot di {} in comune con il NAS: il prossimo invio di btrbk sarà completo.",
+                "{} has no snapshot of {} in common with the NAS any more: btrbk's next send will be a full one.",
+                t,
+                s
+            ),
+            Kind::Test => t!("Notifica di prova inviata da {}.", "Test notification sent by {}.", t),
         };
-        match (self.reminder, it) {
-            (true, true) => format!("{text} (promemoria)"),
-            (true, false) => format!("{text} (reminder)"),
-            _ => text,
-        }
+        let text = if self.reminder { t!("{} (promemoria)", "{} (reminder)", text) } else { text };
+        crate::lang::set(Some(previous));
+        text
     }
 }
 

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>btrbk Backups</title>
 <link rel="icon" href="images/icon_32.png">
-<link rel="stylesheet" href="app.css">
+<link rel="stylesheet" href="app.css?v=dev">
 </head>
 <body>
 <header class="topbar">
@@ -79,7 +79,7 @@
           <label><span data-i18n="webhook_url"></span><input type="url" id="n-webhook-url" class="mono-input" placeholder="https://"></label>
           <label><span data-i18n="webhook_body"></span><textarea id="n-webhook-body" class="mono-input" rows="2"></textarea></label>
           <label class="inline"><span data-i18n="language"></span>
-            <select id="n-language"><option value="it">Italiano</option><option value="en">English</option></select></label>
+            <select id="n-language"></select></label>
           <p class="hint" data-i18n="webhook_hint"></p>
         </div>
         <div class="row-actions">
@@ -97,6 +97,6 @@
 </dialog>
 
 <div class="toasts" id="toasts" aria-live="polite"></div>
-<script src="app.js"></script>
+<script src="app.js?v=dev"></script>
 </body>
 </html>

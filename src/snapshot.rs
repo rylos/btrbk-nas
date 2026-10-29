@@ -359,7 +359,7 @@ pub fn delete(dir: &Path, name: &str, lock: &Path) -> Result<(), String> {
         .truncate(false)
         .write(true)
         .open(lock)
-        .map_err(|e| crate::lang::t!("impossibile aprire il lock: {e}", "cannot open the lock: {e}"))?;
+        .map_err(|e| crate::lang::t!("impossibile aprire il lock: {}", "cannot open the lock: {}", e))?;
     // SAFETY: a valid descriptor; the lock goes with the file when dropped
     if unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&lock), libc::LOCK_EX) } != 0 {
         return Err(crate::lang::t!("lock non ottenuto: {}", "cannot lock: {}", std::io::Error::last_os_error()));
@@ -367,7 +367,7 @@ pub fn delete(dir: &Path, name: &str, lock: &Path) -> Result<(), String> {
 
     let scan = scan(dir).map_err(|e| e.to_string())?;
     if let Some(e) = scan.metadata_error {
-        return Err(crate::lang::t!("metadati btrfs non leggibili: {e}", "cannot read btrfs metadata: {e}"));
+        return Err(crate::lang::t!("metadati btrfs non leggibili: {}", "cannot read btrfs metadata: {}", e));
     }
     let snapshot = scan
         .groups

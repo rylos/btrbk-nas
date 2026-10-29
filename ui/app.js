@@ -2,147 +2,76 @@
 
 /* ---------- texts ---------- */
 
-const TEXTS = {
-  it: {
-    refresh: "Aggiorna", settings: "Impostazioni", targets: "Cartelle di backup",
-    targets_hint: "Le cartelle in cui btrbk invia gli snapshot, una per PC. Il nome è solo un'etichetta.",
-    add_target: "Aggiungi", discover: "Cerca nei volumi", thresholds: "Soglie di allarme",
-    warning_after: "In ritardo dopo", critical_after: "Critico dopo", hours: "ore",
-    cancel: "Annulla", save: "Salva", remove: "Rimuovi", label: "Nome", path: "Percorso",
-    backups: "Backup", status_ok: "Aggiornato", status_warning: "In ritardo", status_critical: "Critico",
-    last_backup: "Ultimo backup", snapshots: "Snapshot", oldest: "Più vecchio", incomplete: "Incompleti",
-    exclusive: "Spazio esclusivo", never: "mai", no_targets_title: "Nessuna cartella di backup",
-    no_targets: "Non ho trovato cartelle con snapshot btrbk. Aggiungine una dalle impostazioni.",
-    open_settings: "Apri impostazioni", history: "Ultimi 30 giorni", subvolumes: "Subvolume",
-    legend_ok: "snapshot ricevuto", legend_bad: "solo ricezioni incomplete", legend_none: "nessuno",
-    col_snapshot: "Snapshot", col_taken: "Creato sul PC", col_received: "Ricevuto sul NAS", col_duration: "Durata",
-    col_state: "Stato", col_uuid: "Received UUID", browse: "Sfoglia", state_ok: "Completo",
-    state_incomplete: "Ricezione incompleta", state_not_subvolume: "Non è un subvolume",
-    state_unknown: "Sconosciuto", col_name: "Nome", col_size: "Dimensione", col_modified: "Modificato",
-    col_mode: "Permessi", col_owner: "UID:GID", download: "Scarica", download_dir: "Scarica cartella (.tar)",
-    file_station: "Apri in File Station",
-    filter: "Filtra…", empty_dir: "Cartella vuota", truncated: "Elenco troncato a 10.000 voci.",
-    session_expired: "Sessione DSM scaduta", session_hint: "Accedi di nuovo a DSM e riapri l'app.",
-    forbidden: "Accesso negato", forbidden_hint: "Questa app è riservata agli amministratori.",
-    error: "Errore", saved: "Impostazioni salvate", discovered: "Trovate {n} cartelle nuove",
-    discovered_none: "Nessuna cartella nuova trovata",
-    incomplete_banner: "{n} snapshot con ricezione incompleta: btrbk non li usa come base e li ricrea al prossimo invio. Si possono cancellare.",
-    late_banner: "L'ultimo backup completo di {s} risale a {t}.",
-    no_backup_banner: "{s} non ha nessun backup completo.",
-    overview: "Panoramica", ago: "fa",
-    target_notify: "Notifiche per questo PC", global: "generale",
-    notifications: "Notifiche", n_enabled: "Controlla i backup e invia notifiche",
-    every: "ogni", minutes: "minuti", events: "Eventi",
-    ev_late: "In ritardo", ev_critical: "Critico", ev_recovered: "Di nuovo aggiornato",
-    ev_incomplete: "Ricezione incompleta", ev_errors: "Cartella non leggibile",
-    reminder: "Ripeti finché il problema resta, ogni", reminder_hint: "0 = una volta sola",
-    channels: "Canali", ch_desktop: "Desktop DSM (campanella), destinatario",
-    ch_desktop_hint: "@administrators = tutti gli amministratori; oppure un utente (alice) o un gruppo (@gruppo). Sul desktop il testo è generico: i dettagli sono nell'app.",
-    ch_webhook: "Webhook, con il messaggio completo", webhook_url: "URL",
-    webhook_body: "Corpo JSON (facoltativo: vuoto = GET)", language: "Lingua",
-    webhook_hint: "Segnaposto {title} e {message}. Telegram: https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<ID>&text={message} · ntfy: corpo {\"topic\":\"<topic>\",\"title\":\"{title}\",\"message\":\"{message}\"} verso https://ntfy.sh · Discord: {\"content\":\"{message}\"}",
-    send_test: "Invia notifica di prova", test_sent: "Notifica di prova inviata",
-    monitor_on: "Controllo attivo ogni {m} min, ultimo {last}.",
-    monitor_off: "Controllo spento dalle impostazioni.",
-    monitor_stopped: "Controllo fermo: avvia btrbk Backups dal Centro pacchetti.",
-    next_send: "Prossimo invio", incremental_from: "incrementale da {s}", full_send: "completo",
-    pending: "Da inviare", on_pc: "Sul PC", next_parent: "prossimo parent", yes: "sì",
-    source_line: "Snapshot del PC {h} aggiornati {t}.",
-    source_missing: "Il PC non invia l'elenco dei suoi snapshot: il prossimo parent non è noto (vedi extras/pc nel README).",
-    source_error: "Elenco degli snapshot del PC non leggibile: {e}",
-    full_send_banner: "{s}: nessuno snapshot in comune con {h}, il prossimo invio di btrbk sarà completo.",
-    ev_full_send: "Prossimo invio completo",
-    delete: "Elimina", delete_old: "Elimina i vecchi ({n})", queue_title: "Coda eliminazioni",
-    q_waiting: "parte tra {s} s", q_deleting: "eliminazione…", q_done: "eliminato", q_error: "errore",
-    cancel_all: "Annulla tutto", clear: "Chiudi", undo: "Annulla", deletable: "Eliminabili",
-    leave_warning: "Ci sono eliminazioni in coda.",
-    del_parent: "È il prossimo parent: eliminarlo forzerebbe un invio completo.",
-    del_newer: "Più recente del parent: btrbk può ancora averne bisogno.",
-    del_unknown: "Il PC non invia l'elenco dei suoi snapshot: il parent non è noto.",
-    del_no_common: "Nessuno snapshot in comune con il PC: la catena è già rotta, non si tocca.",
-    del_receiving: "Ricezione incompleta di meno di un giorno: potrebbe essere ancora in corso.",
-    del_not_subvolume: "Non è un subvolume.",
-    caps_title: "Permessi da attivare.",
-    caps_text: "Dopo ogni installazione o aggiornamento del pacchetto, esegui una volta via SSH:",
-    not_subvolume_banner: "{n} cartelle hanno il nome di uno snapshot ma non sono subvolume: btrbk non le riconosce, vanno controllate a mano.",
-  },
-  en: {
-    refresh: "Refresh", settings: "Settings", targets: "Backup folders",
-    targets_hint: "The folders btrbk sends snapshots into, one per PC. The name is just a label.",
-    add_target: "Add", discover: "Search volumes", thresholds: "Alert thresholds",
-    warning_after: "Late after", critical_after: "Critical after", hours: "hours",
-    cancel: "Cancel", save: "Save", remove: "Remove", label: "Name", path: "Path",
-    backups: "Backups", status_ok: "Up to date", status_warning: "Late", status_critical: "Critical",
-    last_backup: "Last backup", snapshots: "Snapshots", oldest: "Oldest", incomplete: "Incomplete",
-    exclusive: "Exclusive space", never: "never", no_targets_title: "No backup folders",
-    no_targets: "No folder with btrbk snapshots was found. Add one in the settings.",
-    open_settings: "Open settings", history: "Last 30 days", subvolumes: "Subvolumes",
-    legend_ok: "snapshot received", legend_bad: "incomplete receives only", legend_none: "none",
-    col_snapshot: "Snapshot", col_taken: "Taken on the PC", col_received: "Received on the NAS", col_duration: "Duration",
-    col_state: "State", col_uuid: "Received UUID", browse: "Browse", state_ok: "Complete",
-    state_incomplete: "Incomplete receive", state_not_subvolume: "Not a subvolume",
-    state_unknown: "Unknown", col_name: "Name", col_size: "Size", col_modified: "Modified",
-    col_mode: "Mode", col_owner: "UID:GID", download: "Download", download_dir: "Download folder (.tar)",
-    file_station: "Open in File Station",
-    filter: "Filter…", empty_dir: "Empty folder", truncated: "Listing cut at 10,000 entries.",
-    session_expired: "DSM session expired", session_hint: "Sign in to DSM again and reopen the app.",
-    forbidden: "Access denied", forbidden_hint: "This app is for administrators only.",
-    error: "Error", saved: "Settings saved", discovered: "Found {n} new folders",
-    discovered_none: "No new folder found",
-    incomplete_banner: "{n} snapshots with an incomplete receive: btrbk does not use them as a base and receives them again next time. They can be deleted.",
-    late_banner: "The last complete backup of {s} is from {t}.",
-    no_backup_banner: "{s} has no complete backup.",
-    overview: "Overview", ago: "ago",
-    target_notify: "Notifications for this PC", global: "global",
-    notifications: "Notifications", n_enabled: "Check the backups and send notifications",
-    every: "every", minutes: "minutes", events: "Events",
-    ev_late: "Late", ev_critical: "Critical", ev_recovered: "Up to date again",
-    ev_incomplete: "Incomplete receive", ev_errors: "Folder unreadable",
-    reminder: "Repeat while the problem lasts, every", reminder_hint: "0 = once only",
-    channels: "Channels", ch_desktop: "DSM desktop (bell), recipient",
-    ch_desktop_hint: "@administrators = every administrator; or a user (alice) or a group (@group). The desktop text is generic: the details are in the app.",
-    ch_webhook: "Webhook, with the full message", webhook_url: "URL",
-    webhook_body: "JSON body (optional: empty = GET)", language: "Language",
-    webhook_hint: "Placeholders {title} and {message}. Telegram: https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<ID>&text={message} · ntfy: body {\"topic\":\"<topic>\",\"title\":\"{title}\",\"message\":\"{message}\"} to https://ntfy.sh · Discord: {\"content\":\"{message}\"}",
-    send_test: "Send a test notification", test_sent: "Test notification sent",
-    monitor_on: "Check running every {m} min, last {last}.",
-    monitor_off: "Check switched off in the settings.",
-    monitor_stopped: "Check stopped: start btrbk Backups in Package Center.",
-    next_send: "Next send", incremental_from: "incremental from {s}", full_send: "full",
-    pending: "To send", on_pc: "On the PC", next_parent: "next parent", yes: "yes",
-    source_line: "Snapshots of the PC {h} updated {t}.",
-    source_missing: "The PC does not send the list of its snapshots: the next parent is unknown (see extras/pc in the README).",
-    source_error: "The PC's snapshot list cannot be read: {e}",
-    full_send_banner: "{s}: no snapshot in common with {h}, btrbk's next send will be a full one.",
-    ev_full_send: "Next send is a full one",
-    delete: "Delete", delete_old: "Delete the old ones ({n})", queue_title: "Deletion queue",
-    q_waiting: "starts in {s} s", q_deleting: "deleting…", q_done: "deleted", q_error: "error",
-    cancel_all: "Cancel all", clear: "Close", undo: "Undo", deletable: "Deletable",
-    leave_warning: "Deletions are queued.",
-    del_parent: "The next parent: deleting it would force a full send.",
-    del_newer: "Newer than the parent: btrbk may still need it.",
-    del_unknown: "The PC does not send the list of its snapshots: the parent is unknown.",
-    del_no_common: "Nothing in common with the PC: the chain is already broken, left alone.",
-    del_receiving: "Interrupted receive less than a day old: it may still be running.",
-    del_not_subvolume: "Not a subvolume.",
-    caps_title: "Permissions to enable.",
-    caps_text: "After every install or upgrade of the package, run once over SSH:",
-    not_subvolume_banner: "{n} folders are named like snapshots but are not subvolumes: btrbk does not recognise them, check them by hand.",
-  },
+// The interface speaks DSM's language. ui/lang/<code>.js holds every text
+// by key, en.js being the reference; a text a table lacks falls back to
+// English. Adding a language: tools/i18n-check.py --new <code>.
+
+/** DSM's language codes (SYNO.SDS.Session.lang) to ISO ones. */
+const DSM_LANGS = {
+  enu: "en", ita: "it", ger: "de", fre: "fr", spn: "es", cht: "zh-TW", chs: "zh-CN", jpn: "ja", krn: "ko",
+  nld: "nl", ptb: "pt-BR", ptg: "pt", rus: "ru", sve: "sv", dan: "da", nor: "nb", plk: "pl", trk: "tr",
+  csy: "cs", hun: "hu", tha: "th",
 };
-// the DSM session's language (the interface is a same-origin iframe of the
-// desktop), then ?lang=, then the browser's: Italian or English
+
+/** The languages there is a table for, by their own name: also the webhook's choices. */
+const LANGUAGES = {
+  de: "Deutsch", en: "English", es: "Español", fr: "Français", it: "Italiano", nl: "Nederlands",
+  pl: "Polski", pt: "Português", "pt-BR": "Português (Brasil)",
+};
+
+// ?lang= (handy for tests), then the DSM session's language (the interface
+// is a same-origin iframe of the desktop), then the browser's
 function dsmLang() {
+  const asked = new URLSearchParams(location.search).get("lang");
+  if (asked) return asked;
   try {
     const lang = window.parent.SYNO.SDS.Session.lang;
+    // "def" is DSM's "same as the browser"
     if (lang && lang !== "def") return lang;
   } catch { /* opened on its own, outside DSM */ }
-  return new URLSearchParams(location.search).get("lang") || navigator.language || "en";
+  return navigator.language || "en";
 }
-const LANG = dsmLang().toLowerCase().startsWith("it") ? "it" : "en";
-const T = TEXTS[LANG];
+
+/** ISO code of the language with a table, from DSM's or a browser's code: English if none. */
+function resolveLang(raw) {
+  const low = String(raw || "").trim().replace("_", "-");
+  const iso = DSM_LANGS[low.toLowerCase()] || low;
+  const [base, region] = iso.split("-");
+  const full = region ? `${base.toLowerCase()}-${region.toUpperCase()}` : base.toLowerCase();
+  return [full, base.toLowerCase()].find((code) => code in LANGUAGES) || "en";
+}
+
+const LANG = resolveLang(dsmLang());
+/** For Intl: dates and numbers. */
+const LOCALE = { en: "en-GB" }[LANG] || LANG;
+let T = {};
+let EN = {};
+// DSM's web server sends no cache headers: the package version in every
+// URL (build.sh writes it over "dev") keeps browsers off old files
+const ASSET_VERSION = document.currentScript ? new URL(document.currentScript.src).search : "";
+
+/** Loads the table of LANG, and English to fall back on. */
+async function loadTexts() {
+  const load = async (code) => {
+    try {
+      return (await import(`./lang/${code}.js${ASSET_VERSION}`)).default;
+    } catch {
+      return {};
+    }
+  };
+  EN = await load("en");
+  T = LANG === "en" ? EN : await load(LANG);
+}
+
+// With a count {n}, a table can hold one text per plural form of its
+// language: key_one, key_few, key_many (Intl.PluralRules), key for the rest.
+const pluralOf = (table, key, locale, n) =>
+  typeof n === "number" ? table[`${key}_${new Intl.PluralRules(locale).select(n)}`] : undefined;
+
 // placeholders without a value stay as they are: {title} in the webhook help
-const t = (key, vars = {}) => (T[key] || key).replace(/\{(\w+)\}/g, (all, k) => vars[k] ?? all);
+const t = (key, vars = {}) =>
+  (pluralOf(T, key, LOCALE, vars.n) || T[key] || pluralOf(EN, key, "en", vars.n) || EN[key] || key)
+    .replace(/\{(\w+)\}/g, (all, k) => vars[k] ?? all);
 
 /* ---------- helpers ---------- */
 
@@ -176,10 +105,10 @@ const ICONS = {
 };
 const icon = (name) => h("span", { html: ICONS[name], style: "display:contents" });
 
-const dateFmt = new Intl.DateTimeFormat(LANG, { dateStyle: "medium", timeStyle: "short" });
-const secondFmt = new Intl.DateTimeFormat(LANG, { dateStyle: "medium", timeStyle: "medium" });
-const dayFmt = new Intl.DateTimeFormat(LANG, { day: "numeric" });
-const rtf = new Intl.RelativeTimeFormat(LANG, { numeric: "auto" });
+const dateFmt = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeStyle: "short" });
+const secondFmt = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeStyle: "medium" });
+const dayFmt = new Intl.DateTimeFormat(LOCALE, { day: "numeric" });
+const rtf = new Intl.RelativeTimeFormat(LOCALE, { numeric: "auto" });
 
 function formatEpoch(seconds) {
   return seconds ? dateFmt.format(new Date(seconds * 1000)) : "—";
@@ -987,8 +916,11 @@ async function refresh() {
   }
 }
 
-function init() {
+async function init() {
+  await loadTexts();
   document.documentElement.lang = LANG;
+  const languages = document.getElementById("n-language");
+  for (const [code, name] of Object.entries(LANGUAGES)) languages.append(h("option", { value: code }, name));
   // inside the DSM window the window title already names the app
   if (window.self !== window.top) document.body.classList.add("embedded");
   for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);

@@ -1,0 +1,9 @@
+[app]
+title="btrbk Backups"
+late_msg="Cópia de segurança atrasada: um PC não enviou uma cópia de segurança btrbk completa dentro do limiar de atraso. Abra o btrbk Backups para ver os detalhes."
+critical_msg="Cópia de segurança em atraso crítico: um PC não enviou uma cópia de segurança btrbk completa dentro do limiar crítico. Abra o btrbk Backups para ver os detalhes."
+recovered_msg="Cópia de segurança novamente atualizada: um subvolume que estava atrasado recebeu uma nova cópia de segurança completa."
+incomplete_msg="Receção incompleta: uma transferência do btrbk foi interrompida. O btrbk volta a enviar o instantâneo na próxima execução."
+error_msg="Pasta de cópia de segurança ilegível: não é possível ler uma pasta de cópia de segurança do btrbk. Abra o btrbk Backups para ver o motivo."
+full_send_msg="Próximo envio completo: um PC já não tem nenhum instantâneo em comum com o NAS, o btrbk vai transferir tudo novamente. Abra o btrbk Backups para ver os detalhes."
+test_msg="Notificação de teste: as notificações do btrbk Backups chegam a este ambiente de trabalho do DSM."

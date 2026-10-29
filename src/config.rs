@@ -102,7 +102,7 @@ pub struct Notifications {
     /// Who gets them: a user name, or @group.
     pub recipient: String,
     pub webhook: Webhook,
-    /// Language of the webhook texts: "it" or "en".
+    /// Language of the webhook texts: one of lang::available().
     pub language: String,
 }
 
@@ -204,8 +204,9 @@ impl Config {
         fn check(t: Thresholds, what: &str) -> Result<(), String> {
             if t.warning_hours == 0 || t.critical_hours <= t.warning_hours {
                 return Err(t!(
-                    "{what}: le ore per il critico devono superare quelle per il ritardo, entrambe sopra zero",
-                    "{what}: critical hours must be greater than late hours, both above zero"
+                    "{}: le ore per il critico devono superare quelle per il ritardo, entrambe sopra zero",
+                    "{}: critical hours must be greater than late hours, both above zero",
+                    what
                 ));
             }
             Ok(())
@@ -234,8 +235,8 @@ impl Config {
                 "the webhook URL must start with https:// or http://"
             ));
         }
-        if !matches!(n.language.as_str(), "it" | "en") {
-            return Err(t!("la lingua deve essere it o en", "language must be it or en"));
+        if !crate::lang::available().contains(&n.language.as_str()) {
+            return Err(t!("lingua non disponibile: {}", "language not available: {}", n.language));
         }
         for target in &self.targets {
             let path = &target.path;

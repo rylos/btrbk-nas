@@ -6,9 +6,9 @@ were interrupted, and the files inside any snapshot, ready to download, one
 file or a whole folder as `.tar`.
 
 It opens from DSM's main menu like any other app, uses the DSM login, and is
-reserved to the `administrators` group. It speaks Italian or English,
-following the language of the DSM session; webhook notifications have
-their own language setting.
+reserved to the `administrators` group. It speaks the language of the DSM
+session: English, Italian, German, French, Spanish, Dutch, Portuguese
+(Portugal and Brazil) or Polish, English for any other.
 
 ![A backup target: the state of each subvolume and the last 30 days](docs/img/overview.png)
 
@@ -205,6 +205,30 @@ What the package deliberately does **not** do:
   the package's own `var` directory: `config.json` (mode 0600, it can hold a
   webhook token), `monitor-state.json`, `monitor.log`, `monitor.pid`.
 
+## Languages
+
+The interface follows DSM's language (`SYNO.SDS.Session.lang`; DSM's codes
+such as `ita`, `ger`, `ptb` map to ISO ones), and sends it with every
+request, so the NAS answers its messages in it. Webhook notifications have
+their own language, in the settings. A text a language lacks falls back to
+English. Dates and numbers come from `Intl` in the same language.
+
+| Path | What |
+|---|---|
+| `ui/lang/<code>.js` | the interface, by key; `en.js` is the reference |
+| `src/lang/<code>.json` | the NAS's messages, keyed by the Italian of `t!("italiano {}", "English {}", x)`; built into the binary by `build.rs` |
+| `ui/texts/<DSM code>/strings` | DSM desktop notifications (DSM only shows the package's own translated strings) |
+| `spk/INFO.in` | `description_<DSM code>`, for Package Center |
+
+```sh
+tools/i18n-check.py --new sv   # start Swedish from the English: ui/lang, src/lang, ui/texts/sve
+tools/i18n-check.py            # what is missing, unused, still English, or with other placeholders
+```
+
+Then add the language to `LANGUAGES` in `ui/app.js`. `cargo test` refuses
+incomplete tables. The translations use DSM's own terms in each language;
+they were not reviewed by native speakers, and corrections are welcome.
+
 ## Development
 
 ```sh
@@ -231,6 +255,7 @@ only debug builds read. Point `target/devvar/config.json` at the fixture.
 | `extras/pc/` | script and btrbk.service drop-in for the sending PC |
 | `src/browse.rs` | path checks, listings, tar writer |
 | `src/auth.rs`, `src/caps.rs` | DSM login, file capabilities |
+| `src/lang.rs`, `src/lang/`, `ui/lang/` | languages, see above |
 | `ui/` | the interface (no build step, no dependencies) |
 | `tools/` | development server, btrfs fixture, demo data, screenshots |
 | `spk/` | DSM package metadata |

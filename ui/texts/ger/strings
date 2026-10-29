@@ -1,0 +1,9 @@
+[app]
+title="btrbk Backups"
+late_msg="Sicherung verspätet: Ein PC hat innerhalb der Verspätungsschwelle keine vollständige btrbk-Sicherung gesendet. Details in btrbk Backups."
+critical_msg="Sicherung kritisch verspätet: Ein PC hat innerhalb der kritischen Schwelle keine vollständige btrbk-Sicherung gesendet. Details in btrbk Backups."
+recovered_msg="Sicherung wieder aktuell: Ein verspätetes Subvolume hat eine neue vollständige Sicherung empfangen."
+incomplete_msg="Unvollständiger Empfang: Eine btrbk-Übertragung wurde unterbrochen. btrbk sendet den Snapshot beim nächsten Lauf erneut."
+error_msg="Sicherungsordner nicht lesbar: Ein btrbk-Sicherungsordner kann nicht gelesen werden. Den Grund finden Sie in btrbk Backups."
+full_send_msg="Nächster Versand vollständig: Ein PC hat keinen gemeinsamen Snapshot mehr mit dem NAS, btrbk überträgt alles erneut. Details in btrbk Backups."
+test_msg="Testbenachrichtigung: Die Benachrichtigungen von btrbk Backups erreichen diesen DSM-Desktop."

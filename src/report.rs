@@ -111,7 +111,7 @@ pub fn assess(id: usize, target: &Target, config: &Config, now: i64) -> TargetSu
         Ok(scan) => {
             let groups: Vec<_> = scan.groups.iter().map(|g| summarise(g, now, thresholds)).collect();
             let source = source_info(&scan.source);
-            (groups, scan.metadata_error.map(|e| crate::lang::t!("metadati btrfs non leggibili: {e}", "cannot read btrfs metadata: {e}")), source)
+            (groups, scan.metadata_error.map(|e| crate::lang::t!("metadati btrfs non leggibili: {}", "cannot read btrfs metadata: {}", e)), source)
         }
         Err(e) => (Vec::new(), Some(format!("{}: {e}", target.path.display())), None),
     };

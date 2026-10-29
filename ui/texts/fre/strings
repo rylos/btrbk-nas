@@ -1,0 +1,9 @@
+[app]
+title="btrbk Backups"
+late_msg="Sauvegarde en retard : un PC n'a pas envoyé de sauvegarde btrbk complète dans le seuil de retard. Ouvrez btrbk Backups pour les détails."
+critical_msg="Sauvegarde en retard critique : un PC n'a pas envoyé de sauvegarde btrbk complète dans le seuil critique. Ouvrez btrbk Backups pour les détails."
+recovered_msg="Sauvegarde de nouveau à jour : un sous-volume en retard a reçu une nouvelle sauvegarde complète."
+incomplete_msg="Réception incomplète : un transfert btrbk a été interrompu. btrbk renverra l'instantané à sa prochaine exécution."
+error_msg="Dossier de sauvegarde illisible : un dossier de sauvegarde btrbk ne peut pas être lu. Ouvrez btrbk Backups pour en connaître la raison."
+full_send_msg="Prochain envoi complet : un PC n'a plus d'instantané en commun avec le NAS, btrbk transférera tout de nouveau. Ouvrez btrbk Backups pour les détails."
+test_msg="Notification de test : les notifications de btrbk Backups arrivent sur ce bureau DSM."

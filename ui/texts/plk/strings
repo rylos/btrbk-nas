@@ -1,0 +1,9 @@
+[app]
+title="btrbk Backups"
+late_msg="Opóźniona kopia zapasowa: PC nie wysłał pełnej kopii zapasowej btrbk w ramach progu opóźnienia. Szczegóły w aplikacji btrbk Backups."
+critical_msg="Krytycznie opóźniona kopia zapasowa: PC nie wysłał pełnej kopii zapasowej btrbk w ramach progu krytycznego. Szczegóły w aplikacji btrbk Backups."
+recovered_msg="Kopia zapasowa znowu aktualna: opóźniony podwolumin odebrał nową pełną kopię zapasową."
+incomplete_msg="Niepełny odbiór: transfer btrbk został przerwany. btrbk wyśle migawkę ponownie przy następnym przebiegu."
+error_msg="Folder kopii zapasowych nieczytelny: nie można odczytać folderu kopii zapasowych btrbk. Przyczyna w aplikacji btrbk Backups."
+full_send_msg="Następne wysłanie pełne: PC nie ma już żadnej migawki wspólnej z NAS, btrbk prześle wszystko od nowa. Szczegóły w aplikacji btrbk Backups."
+test_msg="Powiadomienie testowe: powiadomienia btrbk Backups docierają na ten pulpit DSM."

@@ -57,7 +57,7 @@ fn target_detail(config: &Config, request: &Request) -> Result<serde_json::Value
                 .map(|g| json!({ "summary": report::summarise(g, now, thresholds), "snapshots": g.snapshots }))
                 .collect();
             let source = report::source_info(&scan.source);
-            (groups, scan.metadata_error.map(|e| t!("metadati btrfs non leggibili: {e}", "cannot read btrfs metadata: {e}")), source)
+            (groups, scan.metadata_error.map(|e| t!("metadati btrfs non leggibili: {}", "cannot read btrfs metadata: {}", e)), source)
         }
         // the page still opens: it says what is wrong with the directory
         Err(e) => (Vec::new(), Some(format!("{}: {e}", target.path.display())), None),
@@ -98,7 +98,7 @@ fn download(config: &Config, request: &Request, out: &mut impl Write) -> Result<
 
 fn save_settings(request: &Request, path: &Path) -> Result<Config, ApiError> {
     let config: Config =
-        serde_json::from_slice(&request.body).map_err(|e| ApiError::bad_request(t!("impostazioni non valide: {e}", "invalid settings: {e}")))?;
+        serde_json::from_slice(&request.body).map_err(|e| ApiError::bad_request(t!("impostazioni non valide: {}", "invalid settings: {}", e)))?;
     config.validate().map_err(ApiError::bad_request)?;
     for target in &config.targets {
         if !target.path.is_dir() {
@@ -118,7 +118,7 @@ fn delete_snapshot(config: &Config, request: &Request, user: &str) -> Result<ser
         snapshot: String,
     }
     let body: Body =
-        serde_json::from_slice(&request.body).map_err(|e| ApiError::bad_request(t!("richiesta non valida: {e}", "invalid request: {e}")))?;
+        serde_json::from_slice(&request.body).map_err(|e| ApiError::bad_request(t!("richiesta non valida: {}", "invalid request: {}", e)))?;
     let target =
         config.targets.get(body.id).ok_or_else(|| ApiError::not_found(t!("cartella di backup inesistente", "no such target")))?;
     let lock = config::var_dir().join("delete.lock");
@@ -135,14 +135,14 @@ fn delete_snapshot(config: &Config, request: &Request, user: &str) -> Result<ser
 /// or not, so they can be tried before saving.
 fn notify_test(request: &Request, user: &str) -> Result<serde_json::Value, ApiError> {
     let notifications: config::Notifications =
-        serde_json::from_slice(&request.body).map_err(|e| ApiError::bad_request(t!("impostazioni non valide: {e}", "invalid settings: {e}")))?;
+        serde_json::from_slice(&request.body).map_err(|e| ApiError::bad_request(t!("impostazioni non valide: {}", "invalid settings: {}", e)))?;
     let check = Config { notifications: notifications.clone(), ..Config::default() };
     check.validate().map_err(ApiError::bad_request)?;
     if !notifications.desktop && !notifications.webhook.enabled {
         return Err(ApiError::bad_request(t!("nessun canale di notifica attivo", "no notification channel is enabled")));
     }
     monitor::send(&monitor::Event::test(user), &notifications)
-        .map_err(|e| ApiError::new(502, t!("notifica non inviata: {e}", "cannot notify: {e}")))?;
+        .map_err(|e| ApiError::new(502, t!("notifica non inviata: {}", "cannot notify: {}", e)))?;
     Ok(json!({ "sent": true }))
 }
 
@@ -177,7 +177,7 @@ fn route(request: &Request, out: &mut impl Write) -> Result<(), ApiError> {
             if config.targets.is_empty() && !config_path.exists() {
                 config.targets = snapshot::discover(Path::new("/")).into_iter().map(Target::new).collect();
                 // webhook texts in the language of whoever opens the app first
-                config.notifications.language = if crate::lang::italian() { "it" } else { "en" }.into();
+                config.notifications.language = crate::lang::code().into();
                 config.save(&config_path)?;
             }
             cgi::json(out, 200, &overview(&config, &user))?;

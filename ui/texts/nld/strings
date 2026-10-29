@@ -1,0 +1,9 @@
+[app]
+title="btrbk Backups"
+late_msg="Back-up te laat: een pc heeft binnen de drempel voor te laat geen volledige btrbk-back-up verstuurd. Open btrbk Backups voor de details."
+critical_msg="Back-up kritiek te laat: een pc heeft binnen de kritieke drempel geen volledige btrbk-back-up verstuurd. Open btrbk Backups voor de details."
+recovered_msg="Back-up weer actueel: een subvolume dat te laat was, heeft een nieuwe volledige back-up ontvangen."
+incomplete_msg="Onvolledige ontvangst: een btrbk-overdracht is onderbroken. btrbk verstuurt de snapshot bij de volgende keer opnieuw."
+error_msg="Back-upmap niet leesbaar: een btrbk-back-upmap kan niet worden gelezen. Open btrbk Backups voor de reden."
+full_send_msg="Volgende verzending volledig: een pc heeft geen gemeenschappelijke snapshot meer met de NAS, btrbk zal alles opnieuw overdragen. Open btrbk Backups voor de details."
+test_msg="Testmelding: meldingen van btrbk Backups komen aan op dit DSM-bureaublad."

@@ -25,14 +25,14 @@ pub fn require_admin() -> Result<String, ApiError> {
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
-        .map_err(|e| ApiError::new(500, t!("impossibile eseguire {AUTHENTICATE}: {e}", "cannot run {AUTHENTICATE}: {e}")))?;
+        .map_err(|e| ApiError::new(500, t!("impossibile eseguire {}: {}", "cannot run {}: {}", AUTHENTICATE, e)))?;
     let user = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if user.is_empty() {
         return Err(ApiError::new(401, t!("accesso a DSM non effettuato", "not logged in to DSM")));
     }
     let groups = fs::read_to_string("/etc/group").unwrap_or_default();
     if !is_member(&groups, ADMIN_GROUP, &user) {
-        return Err(ApiError::new(403, t!("{user} non è un amministratore", "{user} is not an administrator")));
+        return Err(ApiError::new(403, t!("{} non è un amministratore", "{} is not an administrator", user)));
     }
     Ok(user)
 }
