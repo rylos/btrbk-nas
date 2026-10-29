@@ -1,5 +1,6 @@
 //! The JSON API behind the interface.
 
+use std::collections::BTreeMap;
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
@@ -22,6 +23,7 @@ fn overview(config: &Config, user: &str) -> serde_json::Value {
         "user": user,
         "capabilities": crate::caps::granted(),
         "credits": config.show_credits,
+        "theme": themes().remove(&user.to_lowercase()),
         "asset": option_env!("BTRBK_NAS_ASSET").unwrap_or("dev"),
         "now": now,
         "monitor": monitor_status(config),
@@ -148,6 +150,28 @@ fn notify_test(request: &Request, user: &str) -> Result<serde_json::Value, ApiEr
     Ok(json!({ "sent": true }))
 }
 
+/// The theme each admin picked, kept on the NAS: a browser can forget its
+/// own storage.
+fn themes() -> BTreeMap<String, String> {
+    std::fs::read(config::var_dir().join("themes.json")).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+fn save_theme(request: &Request, user: &str) -> Result<serde_json::Value, ApiError> {
+    #[derive(serde::Deserialize)]
+    struct Body {
+        theme: String,
+    }
+    let body: Body =
+        serde_json::from_slice(&request.body).map_err(|e| ApiError::bad_request(t!("richiesta non valida: {}", "invalid request: {}", e)))?;
+    if body.theme != "light" && body.theme != "dark" {
+        return Err(ApiError::bad_request(t!("tema non valido", "invalid theme")));
+    }
+    let mut all = themes();
+    all.insert(user.to_lowercase(), body.theme);
+    config::write_atomic(&config::var_dir().join("themes.json"), &serde_json::to_vec(&all).map_err(io::Error::other)?)?;
+    Ok(json!({ "ok": true }))
+}
+
 /// Targets found on the volumes, with the label they would get.
 fn discover() -> serde_json::Value {
     let found: Vec<_> = snapshot::discover(Path::new("/"))
@@ -192,8 +216,9 @@ fn route(request: &Request, out: &mut impl Write) -> Result<(), ApiError> {
         ("POST", "discover") => cgi::json(out, 200, &discover())?,
         ("POST", "notify-test") => cgi::json(out, 200, &notify_test(request, &user)?)?,
         ("POST", "delete") => cgi::json(out, 200, &delete_snapshot(&config, request, &user)?)?,
+        ("POST", "theme") => cgi::json(out, 200, &save_theme(request, &user)?)?,
         ("GET", "monitor") => cgi::json(out, 200, &monitor_status(&config))?,
-        (_, "overview" | "target" | "browse" | "download" | "settings" | "discover" | "notify-test" | "monitor" | "delete") => {
+        (_, "overview" | "target" | "browse" | "download" | "settings" | "discover" | "notify-test" | "monitor" | "delete" | "theme") => {
             return Err(ApiError::new(405, t!("metodo non consentito", "method not allowed")));
         }
         _ => return Err(ApiError::not_found(t!("API inesistente", "no such API"))),

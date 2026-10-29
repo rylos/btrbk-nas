@@ -44,6 +44,7 @@
  "snapshot inesistente": "instantâneo inexistente",
  "snapshot mancante": "instantâneo em falta",
  "soglie": "limiares",
+ "tema non valido": "tema inválido",
  "{} (promemoria)": "{} (lembrete)",
  "{} non ha più snapshot di {} in comune con il NAS: il prossimo invio di btrbk sarà completo.": "{} já não tem instantâneos de {} em comum com o NAS: o próximo envio do btrbk será completo.",
  "{} non è un amministratore": "{} não é um administrador",

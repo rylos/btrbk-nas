@@ -944,6 +944,8 @@ async function refresh() {
   try {
     state.overview = await api("overview");
     if (staleVersion(state.overview.asset)) return;
+    const theme = state.overview.theme;
+    if ((theme === "light" || theme === "dark") && theme !== document.documentElement.dataset.theme) setTheme(theme);
     state.detail = null;
     document.getElementById("user").textContent = state.overview.user;
     await render();
@@ -957,9 +959,18 @@ async function refresh() {
 
 /* ---------- theme ---------- */
 
-// Light or dark: the system's, until the button in the bar picks one, which
-// this browser then remembers.
+// Light or dark: the system's, until the button in the bar picks one. The
+// NAS keeps the choice for each admin, the browser a copy to paint the
+// first frame with: it can lose it (site data cleared on exit).
 const THEME_KEY = "btrbk-nas.theme";
+
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch { /* private window: for this page only */ }
+  showTheme();
+}
 
 function currentTheme() {
   return document.documentElement.dataset.theme
@@ -988,11 +999,8 @@ function showTheme() {
 
 function toggleTheme() {
   const next = currentTheme() === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = next;
-  try {
-    localStorage.setItem(THEME_KEY, next);
-  } catch { /* private window: for this page only */ }
-  showTheme();
+  setTheme(next);
+  api("theme", {}, { theme: next }).catch(showError);
 }
 
 // index.html set the stored theme already, before the first paint

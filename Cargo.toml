@@ -1,6 +1,6 @@
 [package]
 name = "btrbk-nas"
-version = "0.4.3"
+version = "0.4.4"
 edition = "2024"
 license = "MIT"
 description = "Synology DSM package to inspect the btrbk backups a NAS receives"

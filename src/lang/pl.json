@@ -44,6 +44,7 @@
  "snapshot inesistente": "nie ma takiej migawki",
  "snapshot mancante": "brak migawki",
  "soglie": "progi",
+ "tema non valido": "nieprawidłowy motyw",
  "{} (promemoria)": "{} (przypomnienie)",
  "{} non ha più snapshot di {} in comune con il NAS: il prossimo invio di btrbk sarà completo.": "{} nie ma już migawki {} wspólnej z NAS: następne wysłanie btrbk będzie pełne.",
  "{} non è un amministratore": "{} nie jest administratorem",

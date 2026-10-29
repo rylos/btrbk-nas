@@ -44,6 +44,7 @@
  "snapshot inesistente": "snapshot bestaat niet",
  "snapshot mancante": "snapshot ontbreekt",
  "soglie": "drempels",
+ "tema non valido": "ongeldig thema",
  "{} (promemoria)": "{} (herinnering)",
  "{} non ha più snapshot di {} in comune con il NAS: il prossimo invio di btrbk sarà completo.": "{} heeft geen snapshot van {} meer gemeenschappelijk met de NAS: de volgende verzending van btrbk wordt volledig.",
  "{} non è un amministratore": "{} is geen beheerder",

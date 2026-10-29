@@ -44,6 +44,7 @@
  "snapshot inesistente": "Schnappschuss nicht vorhanden",
  "snapshot mancante": "Schnappschuss fehlt",
  "soglie": "Schwellen",
+ "tema non valido": "ungültiges Design",
  "{} (promemoria)": "{} (Erinnerung)",
  "{} non ha più snapshot di {} in comune con il NAS: il prossimo invio di btrbk sarà completo.": "{} hat keinen gemeinsamen Schnappschuss von {} mehr mit dem NAS: Der nächste Versand von btrbk wird vollständig sein.",
  "{} non è un amministratore": "{} ist kein Administrator",

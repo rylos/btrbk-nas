@@ -44,6 +44,7 @@
  "snapshot inesistente": "la instantánea no existe",
  "snapshot mancante": "falta la instantánea",
  "soglie": "umbrales",
+ "tema non valido": "tema no válido",
  "{} (promemoria)": "{} (recordatorio)",
  "{} non ha più snapshot di {} in comune con il NAS: il prossimo invio di btrbk sarà completo.": "{} ya no tiene ninguna instantánea de {} en común con el NAS: el próximo envío de btrbk será completo.",
  "{} non è un amministratore": "{} no es un administrador",
