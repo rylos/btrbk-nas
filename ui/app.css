@@ -1,26 +1,28 @@
 :root {
-  --bg: #f3f5f8;
+  /* light: Tokyo Night Light, the palette of Fusion's light theme */
+  --bg: #e6e7ed;
   --surface: #ffffff;
-  --surface-2: #f8f9fb;
-  --border: #e1e5eb;
-  --text: #1f2933;
-  --muted: #637083;
-  --accent: #2f80ed;
-  --accent-soft: #e8f1fd;
-  --ok: #1e9e5a;
-  --ok-soft: #e3f5eb;
-  --warn: #c98200;
-  --warn-soft: #fdf3dc;
-  --crit: #d64545;
-  --crit-soft: #fbe6e6;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
+  --surface-2: #f1f2f6;
+  --border: #d5d6db;
+  --text: #343b58;
+  --muted: #6c6e75;
+  --accent: #2959aa;
+  --accent-soft: #dfe6f3;
+  --ok: #3a8f7f;
+  --ok-soft: #dcefeb;
+  --warn: #df8e1d;
+  --warn-soft: #faefdd;
+  --crit: #8c4351;
+  --crit-soft: #f1e2e5;
+  --shadow: 0 1px 2px rgba(52, 59, 88, .08), 0 1px 3px rgba(52, 59, 88, .10);
   --radius: 10px;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
   color-scheme: light;
 }
 
+/* dark: the system's choice, unless the button in the bar chose light */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #14171c;
     --surface: #1c2027;
     --surface-2: #222731;
@@ -38,6 +40,25 @@
     --shadow: 0 1px 2px rgba(0, 0, 0, .4);
     color-scheme: dark;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #14171c;
+  --surface: #1c2027;
+  --surface-2: #222731;
+  --border: #2e3440;
+  --text: #e4e7ec;
+  --muted: #98a2b3;
+  --accent: #5b9cf5;
+  --accent-soft: #1f2d42;
+  --ok: #3cc47c;
+  --ok-soft: #173326;
+  --warn: #e7a93a;
+  --warn-soft: #382c14;
+  --crit: #f06b6b;
+  --crit-soft: #3b1d1d;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -78,6 +99,9 @@ button { font: inherit; color: inherit; }
 .icon-btn:hover { background: var(--surface-2); border-color: var(--border); }
 .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .icon-btn.spinning svg { animation: spin .8s linear infinite; }
+/* the theme button shows the theme it switches to */
+#theme .to-light, #theme.is-dark .to-dark { display: none; }
+#theme.is-dark .to-light { display: inline; }
 
 body.embedded .brand span { display: none; }
 body.embedded .topbar { height: 44px; }

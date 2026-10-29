@@ -17,7 +17,7 @@
  "il percorso passa per qualcosa che non è una cartella": "la ruta pasa por algo que no es una carpeta",
  "impossibile aprire il lock: {}": "no se puede abrir el bloqueo: {}",
  "impossibile eseguire {}: {}": "no se puede ejecutar {}: {}",
- "impostazioni non valide: {}": "ajustes no válidos: {}",
+ "impostazioni non valide: {}": "configuración no válida: {}",
  "l'URL del webhook deve iniziare con https:// o http://": "la URL del webhook debe empezar por https:// o http://",
  "l'intervallo del controllo deve essere fra 5 e 1440 minuti": "el intervalo de comprobación debe estar entre 5 y 1440 minutos",
  "lingua non disponibile: {}": "idioma no disponible: {}",

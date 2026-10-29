@@ -2,6 +2,8 @@
 export default {
   refresh: "Aggiorna",
   settings: "Impostazioni",
+  theme_light: "Tema chiaro",
+  theme_dark: "Tema scuro",
   targets: "Cartelle di backup",
   targets_hint: "Le cartelle in cui btrbk invia gli snapshot, una per PC. Il nome è solo un'etichetta.",
   add_target: "Aggiungi",

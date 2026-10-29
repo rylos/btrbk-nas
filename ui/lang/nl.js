@@ -2,6 +2,8 @@
 export default {
   refresh: "Vernieuwen",
   settings: "Instellingen",
+  theme_light: "Licht thema",
+  theme_dark: "Donker thema",
   targets: "Back-upmappen",
   targets_hint: "De mappen waarin btrbk de snapshots verstuurt, één per pc. De naam is alleen een label.",
   add_target: "Toevoegen",
@@ -96,7 +98,7 @@ export default {
   test_sent: "Testmelding verstuurd",
   monitor_on: "Controle actief elke {m} min, laatste {last}.",
   monitor_off: "Controle uitgeschakeld in de instellingen.",
-  monitor_stopped: "Controle gestopt: start btrbk Backups vanuit het Pakketcentrum.",
+  monitor_stopped: "Controle gestopt: start btrbk Backups vanuit Package Center.",
   next_send: "Volgende verzending",
   incremental_from: "incrementeel vanaf {s}",
   full_send: "volledig",

@@ -900,11 +900,26 @@ async function render() {
   }
 }
 
+// The DSM desktop keeps the loader of the version it started with, so after
+// an upgrade the window can open the old index.html, still in the browser's
+// cache. When the NAS runs another version than the URLs name, reload with
+// its version, once.
+function staleVersion(version) {
+  const named = new URLSearchParams(ASSET_VERSION).get("v");
+  if (!named || named === "dev" || !version || version === "demo" || named === version) return false;
+  const url = new URL(location.href);
+  if (url.searchParams.get("v") === version) return false;
+  url.searchParams.set("v", version);
+  location.replace(url);
+  return true;
+}
+
 async function refresh() {
   const button = document.getElementById("refresh");
   button.classList.add("spinning");
   try {
     state.overview = await api("overview");
+    if (staleVersion(state.overview.version)) return;
     state.detail = null;
     document.getElementById("user").textContent = state.overview.user;
     await render();
@@ -915,6 +930,57 @@ async function refresh() {
     button.classList.remove("spinning");
   }
 }
+
+/* ---------- theme ---------- */
+
+// Light or dark: the system's, until the button in the bar picks one, which
+// this browser then remembers.
+const THEME_KEY = "btrbk-nas.theme";
+
+function storedTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function currentTheme() {
+  return document.documentElement.dataset.theme
+    || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+}
+
+// built here, not in index.html: a page that is still the cached one of
+// an older version must not stop the interface from starting
+function themeButton() {
+  const button = h("button", {
+    class: "icon-btn",
+    id: "theme",
+    html: '<svg class="to-dark" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>'
+      + '<svg class="to-light" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+    onclick: toggleTheme,
+  });
+  document.getElementById("open-settings").before(button);
+}
+
+function showTheme() {
+  const dark = currentTheme() === "dark";
+  const button = document.getElementById("theme");
+  button.classList.toggle("is-dark", dark);
+  button.title = t(dark ? "theme_light" : "theme_dark");
+}
+
+function toggleTheme() {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch { /* private window: for this page only */ }
+  showTheme();
+}
+
+// before anything is drawn, so the page never flashes the other theme
+if (storedTheme() === "light" || storedTheme() === "dark") document.documentElement.dataset.theme = storedTheme();
 
 async function init() {
   await loadTexts();
@@ -927,6 +993,9 @@ async function init() {
   for (const el of document.querySelectorAll("[data-i18n-title]")) el.title = t(el.dataset.i18nTitle);
   document.getElementById("refresh").addEventListener("click", refresh);
   document.getElementById("open-settings").addEventListener("click", openSettings);
+  themeButton();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", showTheme);
+  showTheme();
   document.getElementById("add-target").addEventListener("click", () => document.getElementById("target-rows").append(targetRow()));
   document.getElementById("discover").addEventListener("click", discover);
   document.getElementById("n-test").addEventListener("click", sendTest);

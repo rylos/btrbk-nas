@@ -2,6 +2,8 @@
 export default {
   refresh: "Refresh",
   settings: "Settings",
+  theme_light: "Light theme",
+  theme_dark: "Dark theme",
   targets: "Backup folders",
   targets_hint: "The folders btrbk sends snapshots into, one per PC. The name is just a label.",
   add_target: "Add",

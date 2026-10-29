@@ -6,7 +6,7 @@
 set -eu
 
 cd "$(dirname "$0")/.."
-port=8767
+port=${PORT:-8767}  # PORT=... when 8767 is taken
 out=docs/img
 mkdir -p "$out"
 

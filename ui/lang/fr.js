@@ -2,6 +2,8 @@
 export default {
   refresh: "Actualiser",
   settings: "Paramètres",
+  theme_light: "Thème clair",
+  theme_dark: "Thème sombre",
   targets: "Dossiers de sauvegarde",
   targets_hint: "Les dossiers dans lesquels btrbk envoie les instantanés, un par PC. Le nom n'est qu'une étiquette.",
   add_target: "Ajouter",

@@ -2,6 +2,8 @@
 export default {
   refresh: "Atualizar",
   settings: "Definições",
+  theme_light: "Tema claro",
+  theme_dark: "Tema escuro",
   targets: "Pastas de cópia de segurança",
   targets_hint: "As pastas para onde o btrbk envia os instantâneos, uma por PC. O nome é apenas uma etiqueta.",
   add_target: "Adicionar",
@@ -96,7 +98,7 @@ export default {
   test_sent: "Notificação de teste enviada",
   monitor_on: "Verificação ativa a cada {m} min, última {last}.",
   monitor_off: "Verificação desativada nas definições.",
-  monitor_stopped: "Verificação parada: inicie o btrbk Backups no Centro de pacotes.",
+  monitor_stopped: "Verificação parada: inicie o btrbk Backups no Centro de Pacotes.",
   next_send: "Próximo envio",
   incremental_from: "incremental a partir de {s}",
   full_send: "completo",
