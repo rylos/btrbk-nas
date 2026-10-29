@@ -23,7 +23,7 @@ cp "target/$target/release/btrbk-nas" "$work/pkg/bin/"
 cp -r ui "$work/pkg/ui"
 # DSM's web server sends no cache headers: version the URLs of the interface
 sed -i "s/?v=dev/?v=$asset/; s/name=\"btrbk-nas-asset\" content=\"dev\"/name=\"btrbk-nas-asset\" content=\"$asset\"/" \
-    "$work/pkg/ui/index.html" "$work/pkg/ui/btrbk-nas.js"
+    "$work/pkg/ui/index.html"
 tar -C "$work/pkg" --owner=0 --group=0 -czf "$work/spk/package.tgz" bin ui
 
 sed "s/@VERSION@/$version/" spk/INFO.in > "$work/spk/INFO"

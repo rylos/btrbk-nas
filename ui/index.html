@@ -5,6 +5,18 @@
 <meta name="btrbk-nas-asset" content="dev">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>btrbk Backups</title>
+<script>
+  // the theme before the first paint: the choice this browser keeps, else the system's
+  try {
+    var theme = localStorage.getItem("btrbk-nas.theme");
+    if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+  } catch (e) {}
+</script>
+<style>
+  html { background: #e6e7ed; }
+  @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #14171c; } }
+  html[data-theme="dark"] { background: #14171c; }
+</style>
 <link rel="icon" href="images/icon_32.png">
 <link rel="stylesheet" href="app.css?v=dev">
 </head>

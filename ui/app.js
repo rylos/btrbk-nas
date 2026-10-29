@@ -961,14 +961,6 @@ async function refresh() {
 // this browser then remembers.
 const THEME_KEY = "btrbk-nas.theme";
 
-function storedTheme() {
-  try {
-    return localStorage.getItem(THEME_KEY);
-  } catch {
-    return null;
-  }
-}
-
 function currentTheme() {
   return document.documentElement.dataset.theme
     || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
@@ -1003,8 +995,7 @@ function toggleTheme() {
   showTheme();
 }
 
-// before anything is drawn, so the page never flashes the other theme
-if (storedTheme() === "light" || storedTheme() === "dark") document.documentElement.dataset.theme = storedTheme();
+// index.html set the stored theme already, before the first paint
 
 async function init() {
   await loadTexts();
