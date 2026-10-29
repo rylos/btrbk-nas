@@ -2,12 +2,14 @@
 //! counts as late, and what to notify.
 
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-const PACKAGE: &str = "btrbk-nas";
+use crate::lang::t;
+
+pub const PACKAGE: &str = "btrbk-nas";
 
 fn yes() -> bool {
     true
@@ -119,7 +121,7 @@ impl Default for Notifications {
             desktop: true,
             recipient: "@administrators".into(),
             webhook: Webhook::default(),
-            language: "it".into(),
+            language: "en".into(),
         }
     }
 }
@@ -153,11 +155,21 @@ pub fn var_dir() -> PathBuf {
         .unwrap_or_else(|| Path::new("/var/packages").join(PACKAGE).join("var"))
 }
 
-/// Writes atomically: a crash never leaves half a file behind.
+/// Writes atomically: a crash never leaves half a file behind. The file is
+/// readable by the package user only from its first byte: the settings can
+/// hold a webhook token.
 pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
+    use std::os::unix::fs::OpenOptionsExt;
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
-    fs::write(&tmp, data)?;
+    // a leftover keeps its old mode: create afresh
+    match fs::remove_file(&tmp) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+        _ => {}
+    }
+    let mut file = fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
+    file.write_all(data)?;
+    drop(file);
     fs::rename(&tmp, path)
 }
 
@@ -175,12 +187,8 @@ impl Config {
         }
     }
 
-    /// Saved readable by the package user only: a webhook URL can hold a
-    /// bot token.
     pub fn save(&self, path: &Path) -> io::Result<()> {
-        write_atomic(path, &serde_json::to_vec_pretty(self).map_err(io::Error::other)?)?;
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+        write_atomic(path, &serde_json::to_vec_pretty(self).map_err(io::Error::other)?)
     }
 
     /// The thresholds that apply to `target`: its own, or the global ones.
@@ -195,27 +203,39 @@ impl Config {
     pub fn validate(&self) -> Result<(), String> {
         fn check(t: Thresholds, what: &str) -> Result<(), String> {
             if t.warning_hours == 0 || t.critical_hours <= t.warning_hours {
-                return Err(format!("{what}: critical hours must be greater than late hours, both above zero"));
+                return Err(t!(
+                    "{what}: le ore per il critico devono superare quelle per il ritardo, entrambe sopra zero",
+                    "{what}: critical hours must be greater than late hours, both above zero"
+                ));
             }
             Ok(())
         }
-        check(Thresholds { warning_hours: self.warning_hours, critical_hours: self.critical_hours }, "thresholds")?;
+        check(Thresholds { warning_hours: self.warning_hours, critical_hours: self.critical_hours }, &t!("soglie", "thresholds"))?;
         let n = &self.notifications;
         if !(5..=1440).contains(&n.interval_minutes) {
-            return Err("the check interval must be between 5 and 1440 minutes".into());
+            return Err(t!(
+                "l'intervallo del controllo deve essere fra 5 e 1440 minuti",
+                "the check interval must be between 5 and 1440 minutes"
+            ));
         }
         if n.reminder_hours > 24 * 30 {
-            return Err("reminders can be at most 720 hours apart".into());
+            return Err(t!("i promemoria possono distare al massimo 720 ore", "reminders can be at most 720 hours apart"));
         }
         let name = n.recipient.strip_prefix('@').unwrap_or(&n.recipient);
         if n.desktop && (name.is_empty() || !name.chars().all(|c| c.is_alphanumeric() || "._- ".contains(c))) {
-            return Err("the desktop recipient must be a user name or @group".into());
+            return Err(t!(
+                "il destinatario sul desktop deve essere un nome utente o @gruppo",
+                "the desktop recipient must be a user name or @group"
+            ));
         }
         if n.webhook.enabled && !(n.webhook.url.starts_with("https://") || n.webhook.url.starts_with("http://")) {
-            return Err("the webhook URL must start with https:// or http://".into());
+            return Err(t!(
+                "l'URL del webhook deve iniziare con https:// o http://",
+                "the webhook URL must start with https:// or http://"
+            ));
         }
         if !matches!(n.language.as_str(), "it" | "en") {
-            return Err("language must be it or en".into());
+            return Err(t!("la lingua deve essere it o en", "language must be it or en"));
         }
         for target in &self.targets {
             let path = &target.path;
@@ -225,10 +245,14 @@ impl Config {
                 .and_then(|c| c.as_os_str().to_str())
                 .is_some_and(|first| first.starts_with("volume"));
             if !path.is_absolute() || !under_volume || path.components().any(|c| c.as_os_str() == "..") {
-                return Err(format!("{}: a target must be a directory under /volumeN", path.display()));
+                return Err(t!(
+                    "{}: una cartella di backup deve stare sotto /volumeN",
+                    "{}: a target must be a directory under /volumeN",
+                    path.display()
+                ));
             }
             if self.targets.iter().filter(|t| t.path == *path).count() > 1 {
-                return Err(format!("{}: listed twice", path.display()));
+                return Err(t!("{}: indicata due volte", "{}: listed twice", path.display()));
             }
             check(self.thresholds(target), &target.display_name())?;
         }
@@ -246,6 +270,21 @@ pub fn default_label(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writes_for_the_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("btrbk-nas-test-atomic-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        // a leftover temporary file, readable by all, is not reused as it is
+        fs::write(dir.join("config.json.tmp"), "old").unwrap();
+        fs::set_permissions(dir.join("config.json.tmp"), fs::Permissions::from_mode(0o644)).unwrap();
+        write_atomic(&path, b"{}").unwrap();
+        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(fs::read(&path).unwrap(), b"{}");
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     fn target(path: &str) -> Target {
         Target::new(path.into())

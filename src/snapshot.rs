@@ -100,6 +100,32 @@ impl Deletion {
     pub fn allowed(self) -> bool {
         matches!(self, Deletion::Allowed | Deletion::AllowedIncomplete)
     }
+
+    /// Why it may not go, for whoever asked to delete it.
+    pub fn refusal(self) -> String {
+        use crate::lang::t;
+        match self {
+            Deletion::Allowed | Deletion::AllowedIncomplete => t!("si può cancellare", "it may be deleted"),
+            Deletion::Parent => t!(
+                "è il parent in comune con il PC: cancellarlo renderebbe completo il prossimo invio",
+                "it is the parent in common with the PC: deleting it would make the next send a full one"
+            ),
+            Deletion::Newer => t!("è più recente del parent in comune", "it is newer than the parent in common"),
+            Deletion::ParentUnknown => t!(
+                "il PC non manda l'elenco dei suoi snapshot: il parent non è noto",
+                "the PC sends no list of its snapshots: the parent is unknown"
+            ),
+            Deletion::NoCommonParent => t!(
+                "nessuno snapshot in comune con il PC: si lascia tutto com'è",
+                "no snapshot in common with the PC: everything is left alone"
+            ),
+            Deletion::Receiving => t!(
+                "ricezione interrotta da meno di un giorno: potrebbe essere ancora in corso",
+                "an interrupted receive less than a day old: it may still be running"
+            ),
+            Deletion::NotSubvolume => t!("non è un subvolume", "not a subvolume"),
+        }
+    }
 }
 
 /// An interrupted receive younger than this may be one still in progress: a
@@ -326,31 +352,31 @@ pub fn scan(dir: &Path) -> std::io::Result<Scan> {
 /// cannot race each other.
 pub fn delete(dir: &Path, name: &str, lock: &Path) -> Result<(), String> {
     if name.contains('/') || split_snapshot_name(name).is_none() {
-        return Err("not a snapshot name".into());
+        return Err(crate::lang::t!("non è il nome di uno snapshot", "not a snapshot name"));
     }
     let lock = fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .open(lock)
-        .map_err(|e| format!("cannot open the lock: {e}"))?;
+        .map_err(|e| crate::lang::t!("impossibile aprire il lock: {e}", "cannot open the lock: {e}"))?;
     // SAFETY: a valid descriptor; the lock goes with the file when dropped
     if unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&lock), libc::LOCK_EX) } != 0 {
-        return Err(format!("cannot lock: {}", std::io::Error::last_os_error()));
+        return Err(crate::lang::t!("lock non ottenuto: {}", "cannot lock: {}", std::io::Error::last_os_error()));
     }
 
     let scan = scan(dir).map_err(|e| e.to_string())?;
     if let Some(e) = scan.metadata_error {
-        return Err(format!("cannot read btrfs metadata: {e}"));
+        return Err(crate::lang::t!("metadati btrfs non leggibili: {e}", "cannot read btrfs metadata: {e}"));
     }
     let snapshot = scan
         .groups
         .iter()
         .flat_map(|g| &g.snapshots)
         .find(|s| s.name == name)
-        .ok_or_else(|| "no such snapshot".to_string())?;
+        .ok_or_else(|| crate::lang::t!("snapshot inesistente", "no such snapshot"))?;
     if !snapshot.deletion.allowed() {
-        return Err(format!("refused: {:?}", snapshot.deletion));
+        return Err(snapshot.deletion.refusal());
     }
     let parent = btrfs::open_dir(dir).map_err(|e| e.to_string())?;
     btrfs::destroy_subvolume(&parent, name).map_err(|e| e.to_string())

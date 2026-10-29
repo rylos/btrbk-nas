@@ -130,7 +130,16 @@ const TEXTS = {
     not_subvolume_banner: "{n} folders are named like snapshots but are not subvolumes: btrbk does not recognise them, check them by hand.",
   },
 };
-const LANG = (navigator.language || "en").toLowerCase().startsWith("it") ? "it" : "en";
+// the DSM session's language (the interface is a same-origin iframe of the
+// desktop), then ?lang=, then the browser's: Italian or English
+function dsmLang() {
+  try {
+    const lang = window.parent.SYNO.SDS.Session.lang;
+    if (lang && lang !== "def") return lang;
+  } catch { /* opened on its own, outside DSM */ }
+  return new URLSearchParams(location.search).get("lang") || navigator.language || "en";
+}
+const LANG = dsmLang().toLowerCase().startsWith("it") ? "it" : "en";
 const T = TEXTS[LANG];
 // placeholders without a value stay as they are: {title} in the webhook help
 const t = (key, vars = {}) => (T[key] || key).replace(/\{(\w+)\}/g, (all, k) => vars[k] ?? all);
@@ -246,6 +255,8 @@ class ApiError extends Error {
 
 function apiUrl(route, params = {}) {
   const query = new URLSearchParams(params);
+  // the NAS answers its messages in the interface's language
+  query.set("lang", LANG);
   if (synoToken) query.set("SynoToken", synoToken);
   return `api.cgi/${route}?${query}`;
 }
@@ -451,7 +462,8 @@ function snapshotTable(targetId, targetPath, group) {
         hasUsage ? h("td", { class: "num" }, bytes(snap.usage && snap.usage.exclusive)) : null,
         h("td", { class: "mono", title: info.received_uuid || "" }, info.received_uuid ? info.received_uuid.slice(0, 8) + "…" : "—"),
         h("td", { class: "actions" },
-          snap.problem === "not_subvolume" ? null : h("button", {
+          // only a read-only snapshot holds still: the NAS refuses to browse the others
+          !info.readonly ? null : h("button", {
             class: "btn small",
             onclick: () => go({ target: targetId, group: group.summary.subvolume, snapshot: snap.name }),
           }, icon("browse"), t("browse")),

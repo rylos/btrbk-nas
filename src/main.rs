@@ -3,6 +3,7 @@
 //! One binary, two faces: run by DSM's web server it is the CGI behind the
 //! package interface; run from a shell it prints the same data.
 
+mod lang;
 mod api;
 mod auth;
 mod browse;

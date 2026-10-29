@@ -23,9 +23,16 @@ const fn iow(nr: u64, size: u64) -> u64 {
     (1 << 30) | (size << 16) | (IOC_MAGIC << 8) | nr
 }
 
+const fn ior(nr: u64, size: u64) -> u64 {
+    (2 << 30) | (size << 16) | (IOC_MAGIC << 8) | nr
+}
+
 const IOC_SNAP_DESTROY: u64 = iow(15, 4096);
 const IOC_TREE_SEARCH: u64 = iowr(17, 4096);
 const IOC_INO_LOOKUP: u64 = iowr(18, 4096);
+const IOC_SUBVOL_GETFLAGS: u64 = ior(25, 8);
+/// The read-only flag as SUBVOL_GETFLAGS reports it (not the root item's).
+const SUBVOL_RDONLY: u64 = 1 << 1;
 
 const ROOT_TREE_OBJECTID: u64 = 1;
 const QUOTA_TREE_OBJECTID: u64 = 8;
@@ -303,6 +310,21 @@ pub fn destroy_subvolume(parent: &File, name: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Whether `dir` is the top of a read-only subvolume.
+pub fn is_readonly_subvolume(dir: &File) -> io::Result<bool> {
+    use std::os::unix::fs::MetadataExt;
+    if dir.metadata()?.ino() != SUBVOL_TOP_INO {
+        return Ok(false);
+    }
+    let mut flags: u64 = 0;
+    // SAFETY: the kernel writes one u64
+    let rc = unsafe { libc::ioctl(dir.as_raw_fd(), IOC_SUBVOL_GETFLAGS as _, &mut flags) };
+    if rc < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(flags & SUBVOL_RDONLY != 0)
+}
+
 /// Opens a directory for ioctls without following a final symlink.
 pub fn open_dir(path: &Path) -> io::Result<File> {
     use std::os::unix::fs::OpenOptionsExt;
@@ -361,6 +383,7 @@ mod tests {
         assert_eq!(std::mem::size_of::<VolArgs>(), 4096);
         assert_eq!(IOC_TREE_SEARCH, 0xd000_9411);
         assert_eq!(IOC_INO_LOOKUP, 0xd000_9412);
+        assert_eq!(IOC_SUBVOL_GETFLAGS, 0x8008_9419);
         assert_eq!(std::mem::size_of::<SearchArgs>(), 4096);
         assert_eq!(std::mem::size_of::<InoLookupArgs>(), 4096);
     }

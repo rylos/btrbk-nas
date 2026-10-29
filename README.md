@@ -6,7 +6,9 @@ were interrupted, and the files inside any snapshot, ready to download, one
 file or a whole folder as `.tar`.
 
 It opens from DSM's main menu like any other app, uses the DSM login, and is
-reserved to the `administrators` group.
+reserved to the `administrators` group. It speaks Italian or English,
+following the language of the DSM session; webhook notifications have
+their own language setting.
 
 ![A backup target: the state of each subvolume and the last 30 days](docs/img/overview.png)
 
@@ -27,8 +29,9 @@ reserved to the `administrators` group.
   seconds, during which it can be undone, then they run one at a time. The NAS
   checks every deletion again against fresh data, under a lock, whatever the
   page showed. Without the PC's report only interrupted receives can go.
-- **File browser** inside any snapshot: owner, mode, size, symlinks shown but
-  never followed; download of a file, or of a folder as a `.tar` stream.
+- **File browser** inside any complete snapshot: owner, mode, size, symlinks
+  shown but never followed; download of a file, or of a folder as a `.tar`
+  stream. Interrupted receives are still writable and cannot be browsed.
 
 Backup directories are found by themselves on first start: a share, or a
 directory inside a share, holding subvolumes named like btrbk snapshots. Each
@@ -86,6 +89,12 @@ Anything else that changes the PC's snapshots should run it too:
   ln -s /usr/local/bin/btrbk-nas-push-uuids /etc/btrbk_tui/post-change.d/50-btrbk-nas
   ```
 - Any purge script of yours on the PC: call it after deleting.
+
+The NAS takes the report on trust, as much as it trusts the PC: a PC that
+lies about its snapshots can make its own older backups look deletable,
+here and to `btrbk-nas-prune`. The PC can already delete them anyway: btrbk
+deletes old backups on the target itself (`target_preserve`). Deleting from
+the app still takes an administrator's click.
 
 `extras/nas/btrbk-nas-prune` is the matching purge on the NAS side, for when
 space has to be freed: it keeps the common parent read from
@@ -156,8 +165,29 @@ directory - needs `CAP_DAC_OVERRIDE`. DSM 7 runs third-party packages as their o
 refuses the `capabilities` field of `conf/privilege` for them (error 319,
 *invalid package privilege content*). So the package installs without
 privileges, and `btrbk-nas setup` (as root) writes the file capability on the
-binary, which is executable only by the package user (`0750`). No root
-process, no daemon.
+binary. No process runs as root: the CGI and the background check run as the
+package user, with these capabilities.
+
+They are held as little as possible. Both processes clear them as they
+start; the CGI takes back only those its route needs, after the login
+check (none for the settings, `CAP_DAC_OVERRIDE` only to delete), and the
+background check never holds `CAP_DAC_OVERRIDE`. What is dropped cannot come
+back in that process.
+
+`setup` first gives the binary and the directories above it (`bin`, the
+package's `target`) to root, binary executable only by the package's group
+(`root:btrbk-nas 0750`): the package user cannot swap what an administrator
+runs as root the next time. The file capability is written last, because
+changing the owner drops it.
+
+Inside a snapshot nothing is reached by path. The snapshot is opened once
+and must be a read-only subvolume; every name below it is opened from the
+directory already open, without following symlinks and without leaving the
+subvolume. Replacing entries while a download runs cannot point it
+anywhere else.
+
+The webhook URL can hold a token: curl reads it from stdin, not from its
+command line, which every local user can see.
 
 After an upgrade the background process starts without capabilities: it
 waits, without notifying errors, until `setup` has run, then restarts itself

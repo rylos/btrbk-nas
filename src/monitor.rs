@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -298,15 +298,47 @@ pub fn webhook_request(webhook: &Webhook, title: &str, message: &str) -> (String
     (url, body)
 }
 
+/// A quoted string of a curl config file.
+fn curl_quote(text: &str) -> String {
+    let mut quoted = String::from("\"");
+    for c in text.chars() {
+        match c {
+            '\\' => quoted.push_str("\\\\"),
+            '"' => quoted.push_str("\\\""),
+            '\n' => quoted.push_str("\\n"),
+            '\r' => quoted.push_str("\\r"),
+            '\t' => quoted.push_str("\\t"),
+            c => quoted.push(c),
+        }
+    }
+    quoted.push('"');
+    quoted
+}
+
+/// curl's config, read from stdin: on the command line a token in the URL
+/// would show in ps and /proc/*/cmdline.
+fn curl_config(url: &str, body: Option<&str>) -> String {
+    let mut config = format!("url = {}\n", curl_quote(url));
+    if let Some(body) = body {
+        // data-raw, not data-binary: a body starting with @ is not a file name
+        config.push_str("request = \"POST\"\nheader = \"Content-Type: application/json\"\n");
+        config.push_str(&format!("data-raw = {}\n", curl_quote(body)));
+    }
+    config
+}
+
 fn send_webhook(event: &Event, n: &Notifications) -> io::Result<()> {
     let (url, body) = webhook_request(&n.webhook, "btrbk Backups", &event.text(&n.language));
-    let mut command = Command::new(CURL);
-    command.args(["--silent", "--show-error", "--fail", "--max-time", "20", "--output", "/dev/null"]);
-    if let Some(body) = &body {
-        command.args(["-X", "POST", "-H", "Content-Type: application/json", "--data-binary", body]);
+    let mut child = Command::new(CURL)
+        .args(["--silent", "--show-error", "--fail", "--max-time", "20", "--output", "/dev/null", "--config", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(curl_config(&url, body.as_deref()).as_bytes())?;
     }
-    // the URL goes last, after "--", so it can never be read as an option
-    let output = command.arg("--").arg(&url).output()?;
+    let output = child.wait_with_output()?;
     if output.status.success() {
         Ok(())
     } else {
@@ -335,6 +367,8 @@ pub fn send(event: &Event, n: &Notifications) -> io::Result<()> {
 /// One check: assess, compare, notify, save. With `dry_run` nothing is sent
 /// or saved.
 pub fn check(config: &Config, dry_run: bool) -> io::Result<Vec<Event>> {
+    // the details of an error travel in the webhook text: in its language
+    crate::lang::set(Some(&config.notifications.language));
     let now = report::now();
     let targets = report::assess_all(config, now);
     let path = State::path();
@@ -369,7 +403,7 @@ pub fn log(message: &str) {
 /// errors that only mean "setup has not run yet", wait for setup, then
 /// re-exec to pick up the capabilities (they are granted at exec time).
 fn wait_for_capabilities() {
-    if crate::caps::effective() {
+    if crate::caps::granted() {
         return;
     }
     log("capabilities missing: waiting for 'btrbk-nas setup'");
@@ -385,6 +419,11 @@ fn wait_for_capabilities() {
 
 /// The daemon loop. Never returns.
 pub fn run() -> ! {
+    // checking and notifying never delete: no CAP_DAC_OVERRIDE
+    if let Err(e) = crate::caps::suspend().and_then(|()| crate::caps::limit(crate::caps::READ)) {
+        log(&format!("cannot drop capabilities, not starting: {e}"));
+        std::process::exit(1);
+    }
     log(&format!("started, version {}", crate::api::VERSION));
     sleep(FIRST_CHECK_DELAY);
     loop {
@@ -557,6 +596,14 @@ mod tests {
         let (_, body) = webhook_request(&webhook, "btrbk", "a \"quoted\" line\nnext");
         let parsed: serde_json::Value = serde_json::from_str(&body.unwrap()).unwrap();
         assert_eq!(parsed["content"], "btrbk: a \"quoted\" line\nnext");
+    }
+
+    #[test]
+    fn quotes_the_curl_config() {
+        assert_eq!(curl_config("https://x/?a=\"1\"\\", None), "url = \"https://x/?a=\\\"1\\\"\\\\\"\n");
+        let config = curl_config("https://x/", Some("{\"m\": \"@a\\nb\"}"));
+        assert!(config.contains("request = \"POST\"\n"));
+        assert!(config.ends_with("data-raw = \"{\\\"m\\\": \\\"@a\\\\nb\\\"}\"\n"));
     }
 
     #[test]

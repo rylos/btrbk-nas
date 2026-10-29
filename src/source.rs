@@ -32,7 +32,7 @@ pub struct Source {
 pub fn parse(text: &str) -> Result<Source, String> {
     let mut lines = text.lines();
     if lines.next() != Some(HEADER) {
-        return Err(format!("not a {FILE} file"));
+        return Err(crate::lang::t!("non è un file {FILE}", "not a {FILE} file"));
     }
     let mut source = Source::default();
     for line in lines.filter(|l| !l.trim().is_empty()) {
@@ -40,13 +40,13 @@ pub fn parse(text: &str) -> Result<Source, String> {
         match (fields.next(), fields.next(), fields.next()) {
             (Some("host"), Some(host), None) => source.host = host.to_string(),
             (Some("generated"), Some(epoch), None) => {
-                source.generated = epoch.parse().map_err(|_| format!("bad generated time: {epoch}"))?;
+                source.generated = epoch.parse().map_err(|_| crate::lang::t!("ora di generazione non valida: {epoch}", "bad generated time: {epoch}"))?;
             }
             (Some("snapshot"), Some(uuid), Some(rest)) => {
                 // "<name>" or "<name> <created>"
                 let (name, created) = match rest.split_once(' ') {
                     Some((name, epoch)) => {
-                        (name, Some(epoch.parse().map_err(|_| format!("bad creation time: {epoch}"))?))
+                        (name, Some(epoch.parse().map_err(|_| crate::lang::t!("ora di creazione non valida: {epoch}", "bad creation time: {epoch}"))?))
                     }
                     None => (rest, None),
                 };
@@ -55,7 +55,7 @@ pub fn parse(text: &str) -> Result<Source, String> {
                     source.created.insert(uuid.to_string(), created);
                 }
             }
-            _ => return Err(format!("unexpected line: {line}")),
+            _ => return Err(crate::lang::t!("riga inattesa: {line}", "unexpected line: {line}")),
         }
     }
     Ok(source)

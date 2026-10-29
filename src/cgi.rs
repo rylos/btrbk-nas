@@ -27,7 +27,7 @@ impl Request {
         let content_type = env::var("CONTENT_TYPE").unwrap_or_default();
         let length: usize = env::var("CONTENT_LENGTH").ok().and_then(|l| l.parse().ok()).unwrap_or(0);
         if length > MAX_BODY {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "request body too large"));
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, crate::lang::t!("richiesta troppo grande", "request body too large")));
         }
         let mut body = vec![0; length];
         io::stdin().read_exact(&mut body)?;
