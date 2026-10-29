@@ -17,17 +17,14 @@ SYNO.SDS.BtrbkNas.Instance = Vue.extend({
         "</v-app-window>" +
         "</v-app-instance>",
     data: function () {
-        // the page's choice (same origin), else the system's
+        // the page's choice (same origin), else dark, as the page
         var theme = null;
         try {
             theme = localStorage.getItem("btrbk-nas.theme");
         } catch (e) {}
-        if (theme !== "light" && theme !== "dark") {
-            theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        }
         return {
             src: "/webman/3rdparty/btrbk-nas/index.html?t=" + Date.now(),
-            frameStyle: "display:block;width:100%;height:100%;border:0;background:" + (theme === "dark" ? "#14171c" : "#e6e7ed"),
+            frameStyle: "display:block;width:100%;height:100%;border:0;background:" + (theme === "light" ? "#e6e7ed" : "#14171c"),
         };
     },
 });

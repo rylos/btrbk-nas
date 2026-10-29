@@ -959,7 +959,7 @@ async function refresh() {
 
 /* ---------- theme ---------- */
 
-// Light or dark: the system's, until the button in the bar picks one. The
+// Light or dark: dark, as SynoFile, until the button in the bar picks one. The
 // NAS keeps the choice for each admin, the browser a copy to paint the
 // first frame with: it can lose it (site data cleared on exit).
 const THEME_KEY = "btrbk-nas.theme";
@@ -973,8 +973,7 @@ function setTheme(theme) {
 }
 
 function currentTheme() {
-  return document.documentElement.dataset.theme
-    || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
 }
 
 // built here, not in index.html: a page that is still the cached one of
@@ -1017,7 +1016,6 @@ async function init() {
   document.getElementById("refresh").addEventListener("click", refresh);
   document.getElementById("open-settings").addEventListener("click", openSettings);
   themeButton();
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", showTheme);
   showTheme();
   document.getElementById("add-target").addEventListener("click", () => document.getElementById("target-rows").append(targetRow()));
   document.getElementById("discover").addEventListener("click", discover);

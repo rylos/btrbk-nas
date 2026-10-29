@@ -6,16 +6,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>btrbk Backups</title>
 <script>
-  // the theme before the first paint: the choice this browser keeps, else the system's
+  // the theme before the first paint: the choice this browser keeps, else
+  // dark, as SynoFile (the NAS's copy comes with the overview)
+  var theme = null;
   try {
-    var theme = localStorage.getItem("btrbk-nas.theme");
-    if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+    theme = localStorage.getItem("btrbk-nas.theme");
   } catch (e) {}
+  document.documentElement.dataset.theme = theme === "light" ? "light" : "dark";
 </script>
 <style>
-  html { background: #e6e7ed; }
-  @media (prefers-color-scheme: dark) { html:not([data-theme="light"]) { background: #14171c; } }
-  html[data-theme="dark"] { background: #14171c; }
+  html { background: #14171c; }
+  html[data-theme="light"] { background: #e6e7ed; }
 </style>
 <link rel="icon" href="images/icon_32.png">
 <link rel="stylesheet" href="app.css?v=dev">
