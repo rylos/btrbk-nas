@@ -6,6 +6,8 @@ use std::fmt::Write;
 
 fn main() {
     println!("cargo:rerun-if-changed=src/lang");
+    // set by build.sh: the version and hash of ui/ that the package ships
+    println!("cargo:rerun-if-env-changed=BTRBK_NAS_ASSET");
     let mut names: Vec<String> = std::fs::read_dir("src/lang")
         .map(|dir| {
             dir.flatten().filter_map(|e| e.file_name().into_string().ok()).filter(|n| n.ends_with(".json")).collect()

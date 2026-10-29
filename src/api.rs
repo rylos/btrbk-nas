@@ -21,6 +21,8 @@ fn overview(config: &Config, user: &str) -> serde_json::Value {
         "version": VERSION,
         "user": user,
         "capabilities": crate::caps::granted(),
+        "credits": config.show_credits,
+        "asset": option_env!("BTRBK_NAS_ASSET").unwrap_or("dev"),
         "now": now,
         "monitor": monitor_status(config),
         "targets": report::assess_all(config, now),

@@ -267,6 +267,16 @@ function showError(err) {
 
 /* ---------- sidebar ---------- */
 
+const GITHUB_MARK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>';
+
+/** Version and author, quiet, at the foot of the sidebar. */
+function sidebarFooter(version) {
+  return h("div", { class: "side-footer" },
+    /^\d/.test(version || "") ? h("div", {}, `v${version}`) : null,
+    h("div", { class: "author" }, "Marco Ziliani",
+      h("a", { href: "https://github.com/rylos", target: "_blank", rel: "noopener", title: "GitHub", html: GITHUB_MARK })));
+}
+
 function renderSidebar(route) {
   const side = document.getElementById("sidebar");
   const ov = state.overview;
@@ -284,6 +294,8 @@ function renderSidebar(route) {
         h("div", { class: "sub" }, target.error ? t("error") : relative(target.last_received, ov.now)),
       )),
     ),
+    // replaceChildren would write a null as text
+    ...(ov.credits === false ? [] : [sidebarFooter(ov.version)]),
   );
 }
 
@@ -805,6 +817,8 @@ async function openSettings() {
     $("target-rows").replaceChildren(...config.targets.map(targetRow));
     $("warning-hours").value = config.warning_hours;
     $("critical-hours").value = config.critical_hours;
+    const credits = $("show-credits");
+    if (credits) credits.checked = config.show_credits !== false;
     fillNotifications(config.notifications);
     const ov = state.overview;
     $("monitor-status").textContent = ov ? monitorLine(ov.monitor, ov.now) : "";
@@ -833,6 +847,7 @@ function readSettings() {
     warning_hours: Number($("warning-hours").value),
     critical_hours: Number($("critical-hours").value),
     notifications: readNotifications(),
+    show_credits: $("show-credits")?.checked ?? true,
   };
 }
 
@@ -900,16 +915,25 @@ async function render() {
   }
 }
 
-// The DSM desktop keeps the loader of the version it started with, so after
+// The DSM desktop keeps the loader of the build it started with, so after
 // an upgrade the window can open the old index.html, still in the browser's
-// cache. When the NAS runs another version than the URLs name, reload with
-// its version, once.
-function staleVersion(version) {
-  const named = new URLSearchParams(ASSET_VERSION).get("v");
-  if (!named || named === "dev" || !version || version === "demo" || named === version) return false;
+// cache, with a newer app.js. The page names its build (a meta tag build.sh
+// fills in, version and hash of ui/); when the NAS runs another one, reload
+// with the NAS's in the URL, then once more with a URL never seen before.
+function staleVersion(asset) {
+  const meta = document.querySelector('meta[name="btrbk-nas-asset"]');
+  const page = meta ? meta.content : "";
+  if (!asset || asset === "dev" || page === "dev" || page === asset) return false;
+  const key = `btrbk-nas.reload.${asset}`;
+  let tries = 0;
+  try {
+    tries = Number(sessionStorage.getItem(key)) || 0;
+    sessionStorage.setItem(key, String(tries + 1));
+  } catch { /* no storage: the URL alone */ }
+  if (tries >= 2) return false;
   const url = new URL(location.href);
-  if (url.searchParams.get("v") === version) return false;
-  url.searchParams.set("v", version);
+  url.searchParams.set("v", asset);
+  if (tries === 1) url.searchParams.set("r", String(Date.now()));
   location.replace(url);
   return true;
 }
@@ -919,7 +943,7 @@ async function refresh() {
   button.classList.add("spinning");
   try {
     state.overview = await api("overview");
-    if (staleVersion(state.overview.version)) return;
+    if (staleVersion(state.overview.asset)) return;
     state.detail = null;
     document.getElementById("user").textContent = state.overview.user;
     await render();

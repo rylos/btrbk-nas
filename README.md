@@ -226,8 +226,10 @@ tools/i18n-check.py            # what is missing, unused, still English, or with
 ```
 
 Then add the language to `LANGUAGES` in `ui/app.js`. `cargo test` refuses
-incomplete tables. The translations use DSM's own terms in each language;
-they were not reviewed by native speakers, and corrections are welcome.
+incomplete tables. The translations use DSM's own terms in each language,
+from a glossary shared with [SynoFile](https://github.com/rylos/synofile)
+(`docs/glossary.md` there); they were not reviewed by native speakers, and
+corrections are welcome.
 
 ## Development
 

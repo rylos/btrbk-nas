@@ -4,6 +4,8 @@ export default {
   settings: "Settings",
   theme_light: "Light theme",
   theme_dark: "Dark theme",
+  interface: "Interface",
+  show_credits: "Show the version and author at the foot of the sidebar",
   targets: "Backup folders",
   targets_hint: "The folders btrbk sends snapshots into, one per PC. The name is just a label.",
   add_target: "Add",

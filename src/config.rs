@@ -135,6 +135,8 @@ pub struct Config {
     /// ...and this much older is critical.
     pub critical_hours: u32,
     pub notifications: Notifications,
+    /// Version and author at the foot of the sidebar.
+    pub show_credits: bool,
 }
 
 impl Default for Config {
@@ -144,6 +146,7 @@ impl Default for Config {
             warning_hours: 26,
             critical_hours: 72,
             notifications: Notifications::default(),
+            show_credits: true,
         }
     }
 }

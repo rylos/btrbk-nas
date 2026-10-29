@@ -4,6 +4,8 @@ export default {
   settings: "Configuración",
   theme_light: "Tema claro",
   theme_dark: "Tema oscuro",
+  interface: "Interfaz",
+  show_credits: "Mostrar la versión y el autor al pie de la barra lateral",
   targets: "Carpetas de copia de seguridad",
   targets_hint: "Las carpetas a las que btrbk envía las instantáneas, una por PC. El nombre es solo una etiqueta.",
   add_target: "Añadir",

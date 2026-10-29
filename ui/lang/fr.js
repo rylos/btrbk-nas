@@ -4,6 +4,8 @@ export default {
   settings: "Paramètres",
   theme_light: "Thème clair",
   theme_dark: "Thème sombre",
+  interface: "Interface",
+  show_credits: "Afficher la version et l'auteur en bas de la barre latérale",
   targets: "Dossiers de sauvegarde",
   targets_hint: "Les dossiers dans lesquels btrbk envoie les instantanés, un par PC. Le nom n'est qu'une étiquette.",
   add_target: "Ajouter",

@@ -4,6 +4,8 @@ export default {
   settings: "Configurações",
   theme_light: "Tema claro",
   theme_dark: "Tema escuro",
+  interface: "Interface",
+  show_credits: "Mostrar a versão e o autor no rodapé da barra lateral",
   targets: "Pastas de backup",
   targets_hint: "As pastas para onde o btrbk envia os instantâneos, uma por PC. O nome é apenas um rótulo.",
   add_target: "Adicionar",

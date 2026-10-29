@@ -4,6 +4,8 @@ export default {
   settings: "Ustawienia",
   theme_light: "Jasny motyw",
   theme_dark: "Ciemny motyw",
+  interface: "Interfejs",
+  show_credits: "Pokaż wersję i autora na dole paska bocznego",
   targets: "Foldery kopii zapasowych",
   targets_hint: "Foldery, do których btrbk wysyła migawki, po jednym na każdy PC. Nazwa to tylko etykieta.",
   add_target: "Dodaj",

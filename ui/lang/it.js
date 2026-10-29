@@ -4,6 +4,8 @@ export default {
   settings: "Impostazioni",
   theme_light: "Tema chiaro",
   theme_dark: "Tema scuro",
+  interface: "Interfaccia",
+  show_credits: "Mostra versione e autore in fondo alla barra laterale",
   targets: "Cartelle di backup",
   targets_hint: "Le cartelle in cui btrbk invia gli snapshot, una per PC. Il nome è solo un'etichetta.",
   add_target: "Aggiungi",

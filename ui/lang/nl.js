@@ -4,6 +4,8 @@ export default {
   settings: "Instellingen",
   theme_light: "Licht thema",
   theme_dark: "Donker thema",
+  interface: "Interface",
+  show_credits: "Versie en auteur onderaan de zijbalk weergeven",
   targets: "Back-upmappen",
   targets_hint: "De mappen waarin btrbk de snapshots verstuurt, één per pc. De naam is alleen een label.",
   add_target: "Toevoegen",

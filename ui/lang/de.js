@@ -4,6 +4,8 @@ export default {
   settings: "Einstellungen",
   theme_light: "Helles Design",
   theme_dark: "Dunkles Design",
+  interface: "Oberfläche",
+  show_credits: "Version und Autor unten in der Seitenleiste anzeigen",
   targets: "Sicherungsordner",
   targets_hint: "Die Ordner, in die btrbk die Schnappschüsse sendet, einer pro PC. Der Name ist nur eine Bezeichnung.",
   add_target: "Hinzufügen",
