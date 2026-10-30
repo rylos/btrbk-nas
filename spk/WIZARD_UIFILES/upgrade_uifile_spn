@@ -1,0 +1,10 @@
+[
+  {
+    "step_title": "Permisos que activar",
+    "items": [
+      {
+        "desc": "DSM 7 no permite que los paquetes de terceros pidan los privilegios que necesitan, así que btrbk Backups se instala sin ellos.<br><br>Tras cada instalación o actualización del paquete, ejecute una vez por SSH:<br><br><code>sudo /var/packages/btrbk-nas/target/bin/btrbk-nas setup</code><br><br><a target=\"_blank\" href=\"https://github.com/rylos/btrbk-nas#install\">Detalles</a>"
+      }
+    ]
+  }
+]

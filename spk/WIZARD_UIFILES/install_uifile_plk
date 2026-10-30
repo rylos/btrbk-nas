@@ -1,0 +1,10 @@
+[
+  {
+    "step_title": "Uprawnienia do włączenia",
+    "items": [
+      {
+        "desc": "DSM 7 nie pozwala pakietom innych firm prosić o potrzebne uprawnienia, więc btrbk Backups instaluje się bez nich.<br><br>Po każdej instalacji lub aktualizacji pakietu należy raz uruchomić przez SSH:<br><br><code>sudo /var/packages/btrbk-nas/target/bin/btrbk-nas setup</code><br><br><a target=\"_blank\" href=\"https://github.com/rylos/btrbk-nas#install\">Szczegóły</a>"
+      }
+    ]
+  }
+]

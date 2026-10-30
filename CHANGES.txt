@@ -1,0 +1,52 @@
+v0.4.6
+- The install and upgrade wizard has a step that says to run setup, with the command.
+- CHANGES.txt: the changes of every version.
+
+v0.4.5
+- When the browser keeps no theme (site data cleared), the app opens dark instead of in the system theme: no more white before the theme saved on the NAS arrives.
+
+v0.4.4
+- The theme picked in the bar is saved on the NAS for each admin: another browser, or one that cleared its site data, opens with the same theme.
+
+v0.4.3
+- No flashes of white when the app opens: the window takes the theme's background at once.
+- After an upgrade the DSM window opens the new interface directly, without reloading itself.
+
+v0.4.2
+- The foot of the sidebar shows the version and the author, with a link to GitHub; Settings > Interface hides them.
+- Bug fix for an interface half old and half new after an upgrade (for instance failing to open the settings): every build has URLs of its own.
+
+v0.4.1
+- A button in the bar switches between the light and the dark theme. The light theme is now Tokyo Night Light.
+- The translations use the words DSM itself shows in each language.
+- Bug fix for an endless spinner after an upgrade in a DSM desktop opened before it.
+
+v0.4.0
+- Nine languages: English, Italian, German, French, Spanish, Dutch, Portuguese (Portugal and Brazil) and Polish, following the DSM session.
+- The NAS answers its messages, webhook notifications and DSM desktop notifications in the same languages.
+- Bug fix for browsers showing the previous interface after an upgrade.
+
+v0.3.2
+- Security hardening from the review in issue #1:
+  - capabilities are held as little as possible, and only for the routes that need them;
+  - setup gives the binary and the package's directories to root before writing the file capability;
+  - browsing and downloads go by file descriptor, never following symlinks or leaving the snapshot;
+  - the webhook URL reaches curl on stdin, not on its command line;
+  - config.json and the monitor state are created with mode 0600;
+  - /health only says that the CGI runs.
+- Italian and English, following the DSM session.
+
+v0.3.1
+- "Open in File Station" on every snapshot, file and folder.
+- The snapshot table shows when each snapshot was taken on the PC, to the second.
+
+v0.3.0
+- Delete old snapshots from the NAS without breaking btrbk's incremental chain: every snapshot says whether it may be deleted, and why not.
+- Deletions are queued, with five seconds to undo, and checked again on the NAS before each one.
+- setup now also grants cap_dac_override, needed to delete.
+
+v0.2.0
+- First public release: one page per sending PC, a card per subvolume with the last complete backup, late and critical warnings, interrupted receives.
+- A file browser inside any snapshot, with downloads of files or whole folders as .tar.
+- btrbk's next incremental parent and the snapshots still to send, from a list the PC sends.
+- Notifications of changes on the DSM desktop and an optional webhook.
