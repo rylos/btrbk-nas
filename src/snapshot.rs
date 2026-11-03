@@ -1,12 +1,13 @@
 //! btrbk snapshot names and the state of the snapshots a target directory
 //! holds. Name parsing is the one of btrbk_tui, kept identical on purpose.
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{NaiveDate, NaiveDateTime, TimeDelta};
 use serde::Serialize;
 
 use crate::btrfs::{self, SUBVOL_TOP_INO, SubvolInfo, Usage};
@@ -24,28 +25,76 @@ pub fn split_snapshot_name(name: &str) -> Option<(&str, &str)> {
 /// timestamp_format flavours (short, long, long-iso), with the optional "_N"
 /// suffix btrbk adds when a name is already taken.
 pub fn parse_btrbk_timestamp(timestamp: &str) -> Option<NaiveDateTime> {
+    timestamp_parts(timestamp).map(|(local, _, _)| local)
+}
+
+/// The parts of a btrbk timestamp: the time as written (local time of the
+/// sender), its UTC offset in seconds when long-iso carries one, and the
+/// "_N" suffix (0 without one).
+fn timestamp_parts(timestamp: &str) -> Option<(NaiveDateTime, Option<i32>, u64)> {
     // legacy "YYYYMMDD_HHMMSS" names: here the underscore is not a "_N" suffix
     if let Ok(dt) = NaiveDateTime::parse_from_str(timestamp, "%Y%m%d_%H%M%S") {
-        return Some(dt);
+        return Some((dt, None, 0));
     }
 
-    let base = timestamp.split('_').next()?;
-    // long-iso carries a UTC offset: the name already is local time, drop it
-    let base = base.split(['+', '-']).next()?;
-
-    match base.len() {
+    let (stamp, suffix) = match timestamp.split_once('_') {
+        Some((stamp, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => (stamp, n.parse().ok()?),
+        Some(_) => return None,
+        None => (timestamp, 0),
+    };
+    let (base, offset) = match stamp.find(['+', '-', 'Z']) {
+        Some(at) => (&stamp[..at], Some(parse_offset(&stamp[at..])?)),
+        None => (stamp, None),
+    };
+    // as btrbk writes them: an offset only follows the seconds of long-iso
+    if offset.is_some() && base.len() != 15 {
+        return None;
+    }
+    let local = match base.len() {
         8 => NaiveDate::parse_from_str(base, "%Y%m%d").ok()?.and_hms_opt(0, 0, 0),
         13 => NaiveDateTime::parse_from_str(base, "%Y%m%dT%H%M").ok(),
         15 => NaiveDateTime::parse_from_str(base, "%Y%m%dT%H%M%S").ok(),
         _ => None,
+    }?;
+    Some((local, offset, suffix))
+}
+
+/// "Z", "+0100", "-0530" in seconds east of UTC.
+fn parse_offset(text: &str) -> Option<i32> {
+    if text == "Z" {
+        return Some(0);
     }
+    let sign = match text.as_bytes().first()? {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    let digits = &text[1..];
+    if digits.len() != 4 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let (hours, minutes): (i32, i32) = (digits[..2].parse().ok()?, digits[2..].parse().ok()?);
+    (hours <= 14 && minutes < 60).then_some(sign * (hours * 3600 + minutes * 60))
+}
+
+/// Orders snapshot names oldest first: by the time in the name, in UTC when
+/// it carries an offset (a PC that changed time zone), then by btrbk's "_N"
+/// suffix as a number ("_10" after "_9"). The name itself breaks ties.
+pub fn compare_names(a: &str, b: &str) -> Ordering {
+    fn key(name: &str) -> Option<(NaiveDateTime, u64)> {
+        let (_, timestamp) = split_snapshot_name(name)?;
+        let (local, offset, suffix) = timestamp_parts(timestamp)?;
+        Some((local - TimeDelta::seconds(offset.unwrap_or(0).into()), suffix))
+    }
+    key(a).cmp(&key(b)).then_with(|| a.cmp(b))
 }
 
 /// Something wrong with one snapshot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Problem {
-    /// No received UUID, or still writable: `btrfs receive` was interrupted.
+    /// Still writable: `btrfs receive` makes a snapshot read-only only once
+    /// it is complete, so this one was interrupted (or is still running).
     /// btrbk calls these "garbled" and will not use them as a parent.
     Incomplete,
     /// A directory with a snapshot name that is not a subvolume.
@@ -94,6 +143,9 @@ pub enum Deletion {
     Receiving,
     /// Not a subvolume: not btrbk's, never touched.
     NotSubvolume,
+    /// Read-only but never received (no received UUID): a snapshot taken
+    /// on the NAS itself, not a copy from the PC; never touched.
+    NotReceived,
 }
 
 impl Deletion {
@@ -124,6 +176,10 @@ impl Deletion {
                 "an interrupted receive less than a day old: it may still be running"
             ),
             Deletion::NotSubvolume => t!("non è un subvolume", "not a subvolume"),
+            Deletion::NotReceived => t!(
+                "non è una copia ricevuta da un PC: si lascia com'è",
+                "not a copy received from a PC: it is left alone"
+            ),
         }
     }
 }
@@ -145,6 +201,7 @@ pub fn mark_deletion(groups: &mut [Group], now: i64) {
                     let started = snap.info.as_ref().map_or(now, |i| i.otime);
                     if now - started >= RECEIVE_GRACE_SECS { Deletion::AllowedIncomplete } else { Deletion::Receiving }
                 }
+                (None, _, _) if snap.info.as_ref().is_some_and(|i| i.received_uuid.is_none()) => Deletion::NotReceived,
                 (None, None, _) => Deletion::ParentUnknown,
                 (None, Some(None), _) => Deletion::NoCommonParent,
                 (None, Some(Some(_)), Some(p)) if i < p => Deletion::Newer,
@@ -227,7 +284,7 @@ pub fn group_names(names: impl IntoIterator<Item = String>) -> Vec<(String, Vec<
         }
     }
     for (_, snapshots) in &mut groups {
-        snapshots.sort_by(|a, b| b.cmp(a));
+        snapshots.sort_by(|a, b| compare_names(b, a));
     }
     groups.sort_by(|(a, _), (b, _)| a.cmp(b));
     groups
@@ -256,10 +313,9 @@ pub fn analyse(
                         Some(Err(problem)) => (None, Some(*problem)),
                         None => (None, None),
                     };
-                    let problem = problem.or_else(|| {
-                        let info = info.as_ref()?;
-                        (info.received_uuid.is_none() || !info.readonly).then_some(Problem::Incomplete)
-                    });
+                    // read-only without a received UUID is a local snapshot, not a
+                    // receive: receives become read-only only when complete
+                    let problem = problem.or_else(|| (!info.as_ref()?.readonly).then_some(Problem::Incomplete));
                     let usage = info.as_ref().and_then(|i| usage.get(&i.root_id).copied());
                     Snapshot { name, timestamp, problem, info, usage, on_source: None, created: None, deletion: Deletion::default() }
                 })
@@ -284,7 +340,7 @@ pub fn link_source(groups: &mut [Group], source: &crate::source::Source) {
             .iter()
             .find(|s| s.problem.is_none() && s.on_source == Some(true))
             .map(|s| s.name.clone());
-        let pending = source
+        let mut pending: Vec<String> = source
             .snapshots
             .iter()
             .filter(|(uuid, name)| {
@@ -292,10 +348,9 @@ pub fn link_source(groups: &mut [Group], source: &crate::source::Source) {
                     && split_snapshot_name(name).is_some_and(|(prefix, _)| prefix == group.subvolume)
             })
             .map(|(_, name)| name.clone())
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .rev()
             .collect();
+        pending.sort_by(|a, b| compare_names(b, a));
+        pending.dedup();
         group.chain = Some(Chain { full_send: next_parent.is_none(), next_parent, pending });
     }
 }
@@ -347,39 +402,72 @@ pub fn scan(dir: &Path) -> std::io::Result<Scan> {
     Ok(scan)
 }
 
+/// Why a snapshot was not deleted.
+#[derive(Debug, PartialEq, Eq)]
+pub enum DeleteError {
+    /// Not a snapshot name.
+    Invalid(String),
+    NotFound(String),
+    /// The checks say it must stay.
+    Refused(String),
+    /// The lock, the scan or btrfs failed.
+    Failed(String),
+}
+
+impl DeleteError {
+    /// The HTTP status that says it.
+    pub fn status(&self) -> u16 {
+        match self {
+            DeleteError::Invalid(_) => 400,
+            DeleteError::NotFound(_) => 404,
+            DeleteError::Refused(_) => 409,
+            DeleteError::Failed(_) => 500,
+        }
+    }
+}
+
+impl std::fmt::Display for DeleteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let (DeleteError::Invalid(m) | DeleteError::NotFound(m) | DeleteError::Refused(m) | DeleteError::Failed(m)) = self;
+        f.write_str(m)
+    }
+}
+
 /// Deletes one snapshot of a target, after checking again, on fresh data,
 /// that it may go. Deletions are serialised with a lock: two browser windows
 /// cannot race each other.
-pub fn delete(dir: &Path, name: &str, lock: &Path) -> Result<(), String> {
+pub fn delete(dir: &Path, name: &str, lock: &Path) -> Result<(), DeleteError> {
+    use crate::lang::t;
+    use DeleteError::{Failed, Invalid, NotFound, Refused};
     if name.contains('/') || split_snapshot_name(name).is_none() {
-        return Err(crate::lang::t!("non è il nome di uno snapshot", "not a snapshot name"));
+        return Err(Invalid(t!("non è il nome di uno snapshot", "not a snapshot name")));
     }
     let lock = fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .open(lock)
-        .map_err(|e| crate::lang::t!("impossibile aprire il lock: {}", "cannot open the lock: {}", e))?;
+        .map_err(|e| Failed(t!("impossibile aprire il lock: {}", "cannot open the lock: {}", e)))?;
     // SAFETY: a valid descriptor; the lock goes with the file when dropped
     if unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&lock), libc::LOCK_EX) } != 0 {
-        return Err(crate::lang::t!("lock non ottenuto: {}", "cannot lock: {}", std::io::Error::last_os_error()));
+        return Err(Failed(t!("lock non ottenuto: {}", "cannot lock: {}", std::io::Error::last_os_error())));
     }
 
-    let scan = scan(dir).map_err(|e| e.to_string())?;
+    let scan = scan(dir).map_err(|e| Failed(e.to_string()))?;
     if let Some(e) = scan.metadata_error {
-        return Err(crate::lang::t!("metadati btrfs non leggibili: {}", "cannot read btrfs metadata: {}", e));
+        return Err(Failed(t!("metadati btrfs non leggibili: {}", "cannot read btrfs metadata: {}", e)));
     }
     let snapshot = scan
         .groups
         .iter()
         .flat_map(|g| &g.snapshots)
         .find(|s| s.name == name)
-        .ok_or_else(|| crate::lang::t!("snapshot inesistente", "no such snapshot"))?;
+        .ok_or_else(|| NotFound(t!("snapshot inesistente", "no such snapshot")))?;
     if !snapshot.deletion.allowed() {
-        return Err(snapshot.deletion.refusal());
+        return Err(Refused(snapshot.deletion.refusal()));
     }
-    let parent = btrfs::open_dir(dir).map_err(|e| e.to_string())?;
-    btrfs::destroy_subvolume(&parent, name).map_err(|e| e.to_string())
+    let parent = btrfs::open_dir(dir).map_err(|e| Failed(e.to_string()))?;
+    btrfs::destroy_subvolume(&parent, name).map_err(|e| Failed(e.to_string()))
 }
 
 /// Looks for btrbk target directories: a share, or a directory directly
@@ -573,14 +661,73 @@ mod tests {
             ("@.1".to_string(), Err(Problem::NotSubvolume)),
         ]);
         let usage = HashMap::from([(2, Usage { referenced: 10, exclusive: 2 })]);
-        let group = &analyse(groups, &meta, &usage)[0];
-        let s = &group.snapshots;
-        assert_eq!(s[0].problem, Some(Problem::Incomplete));
+        let mut groups = analyse(groups, &meta, &usage);
+        let s = &groups[0].snapshots;
+        // read-only without a received UUID: a local snapshot, not a receive
+        assert_eq!(s[0].problem, None);
         assert_eq!(s[1].problem, Some(Problem::Incomplete));
         assert_eq!(s[2].problem, None);
         assert_eq!(s[3].problem, Some(Problem::NotSubvolume));
         assert_eq!(s[2].usage.unwrap().exclusive, 2);
         // incomplete receives do not count as the last backup
-        assert_eq!(group.last_received(), Some(2));
+        assert_eq!(groups[0].last_received(), Some(4));
+
+        // a writable one without a received UUID is a receive in progress
+        let meta = HashMap::from([("@.1".to_string(), Ok(info(1, false, false)))]);
+        let g = analyse(vec![("@".to_string(), vec!["@.1".into()])], &meta, &HashMap::new());
+        assert_eq!(g[0].snapshots[0].problem, Some(Problem::Incomplete));
+
+        // the local snapshot is never deleted, however old
+        mark_deletion(&mut groups, i64::MAX / 2);
+        assert_eq!(groups[0].snapshots[0].deletion, Deletion::NotReceived);
+        assert!(!Deletion::NotReceived.allowed());
+    }
+
+    #[test]
+    fn parses_btrbk_timestamps_strictly() {
+        let at = |text| parse_btrbk_timestamp(text).map(|t| t.to_string());
+        assert_eq!(at("20260101").as_deref(), Some("2026-01-01 00:00:00"));
+        assert_eq!(at("20260101T1200").as_deref(), Some("2026-01-01 12:00:00"));
+        assert_eq!(at("20260101T120000+0100_2").as_deref(), Some("2026-01-01 12:00:00"));
+        assert_eq!(at("20260101T120000Z").as_deref(), Some("2026-01-01 12:00:00"));
+        assert_eq!(at("20260101_120000").as_deref(), Some("2026-01-01 12:00:00"));
+        assert_eq!(at("20260101_3").as_deref(), Some("2026-01-01 00:00:00"));
+        for bad in [
+            "20260101T120000+01",
+            "20260101T120000+0160",
+            "20260101T120000+1500",
+            "20260101T120000+01:00",
+            "20260101+0100",
+            "20260101T1200-0100",
+            "20260101T120000+0100junk",
+            "20260101_",
+            "20260101_x",
+            "2026-01-01",
+        ] {
+            assert_eq!(at(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn sorts_by_time_then_suffix() {
+        let names = [
+            "@.20260101T120000+0100_10",
+            "@.20260101T120000+0100_9",
+            "@.20260101T120000+0100",
+            // 11:30 UTC: newer than 12:00+0100, which is 11:00 UTC
+            "@.20260101T103000-0100",
+            "@.20251231",
+        ];
+        let groups = group_names(names.iter().map(|s| s.to_string()));
+        assert_eq!(
+            groups[0].1,
+            [
+                "@.20260101T103000-0100",
+                "@.20260101T120000+0100_10",
+                "@.20260101T120000+0100_9",
+                "@.20260101T120000+0100",
+                "@.20251231",
+            ]
+        );
     }
 }

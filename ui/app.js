@@ -135,7 +135,8 @@ function bytes(n) {
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
   let i = 0;
   while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-  return `${n.toFixed(i === 0 ? 0 : n < 10 ? 2 : 1)} ${units[i]}`;
+  const digits = i === 0 ? 0 : n < 10 ? 2 : 1;
+  return `${n.toLocaleString(LOCALE, { minimumFractionDigits: digits, maximumFractionDigits: digits })} ${units[i]}`;
 }
 
 /** "20261026T0847" -> Date in local time, or null. */
@@ -216,7 +217,8 @@ const state = {
 
 /** #/t/<id>[/g/<subvolume>][/b/<snapshot>[/<path>]] */
 function parseHash() {
-  const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
+  const decode = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
+  const parts = location.hash.replace(/^#\/?/, "").split("/").map(decode);
   const route = { target: null, group: null, snapshot: null, path: "" };
   for (let i = 0; i < parts.length; i++) {
     if (parts[i] === "t") route.target = Number(parts[++i]);
@@ -302,7 +304,11 @@ function renderSidebar(route) {
 /* ---------- target page ---------- */
 
 function groupCard(summary, now, selected, onclick) {
-  return h("div", { class: `card clickable${selected ? " selected" : ""}`, onclick },
+  return h("div", {
+    class: `card clickable${selected ? " selected" : ""}`, onclick, tabindex: "0", role: "button",
+    "aria-pressed": String(selected),
+    onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); onclick(); } },
+  },
     h("div", { class: "card-head" },
       h("span", { class: "card-title", title: summary.subvolume }, summary.subvolume),
       statusPill(summary.status)),
@@ -337,7 +343,8 @@ function timeline(groups) {
   const days = [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  for (let i = 29; i >= 0; i--) days.push(new Date(today.getTime() - i * 86400000));
+  // by calendar day, not 24 h steps: a DST change would shift every column
+  for (let i = 29; i >= 0; i--) days.push(new Date(today.getFullYear(), today.getMonth(), today.getDate() - i));
   const key = (d) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
 
   const grid = h("div", { class: "timeline-grid", style: `grid-template-columns: max-content repeat(${days.length}, minmax(14px, 1fr))` });
@@ -360,9 +367,9 @@ function timeline(groups) {
   for (const day of days) grid.append(h("div", { class: "day" }, dayFmt.format(day)));
   return h("div", { class: "card timeline" }, grid,
     h("div", { class: "legend" },
-      h("span", {}, h("i", { style: "background:var(--ok)" }), t("legend_ok")),
-      h("span", {}, h("i", { style: "background:var(--warn)" }), t("legend_bad")),
-      h("span", {}, h("i", { style: "background:var(--surface-2);border:1px solid var(--border)" }), t("legend_none")),
+      h("span", {}, h("i", { class: "ok" }), t("legend_ok")),
+      h("span", {}, h("i", { class: "bad" }), t("legend_bad")),
+      h("span", {}, h("i", {}), t("legend_none")),
     ));
 }
 
@@ -374,6 +381,7 @@ function snapshotState(snap) {
 }
 
 function snapshotTable(targetId, targetPath, group) {
+  rowSnaps.clear();
   const hasUsage = group.snapshots.some((s) => s.usage);
   const hasSource = group.snapshots.some((s) => s.on_source !== null && s.on_source !== undefined);
   const parent = group.summary.chain && group.summary.chain.next_parent;
@@ -382,13 +390,13 @@ function snapshotTable(targetId, targetPath, group) {
       h("th", {}, t("col_snapshot")), h("th", {}, t("col_taken")),
       h("th", {}, t("col_state")),
       hasSource ? h("th", {}, t("on_pc")) : null,
-      hasUsage ? h("th", {}, t("exclusive")) : null,
-      h("th", {}, t("col_uuid")), h("th", { class: "actions" }))),
+      hasUsage ? h("th", { class: "num" }, t("exclusive")) : null,
+      h("th", { class: "actions" }))),
     h("tbody", {}, group.snapshots.map((snap) => {
       const info = snap.info || {};
       const taken = parseStamp(snap.timestamp);
-      return h("tr", { "data-target": targetId, "data-name": snap.name, "data-deletion": snap.deletion },
-        h("td", { class: "mono" }, snap.name,
+      return h("tr", { "data-target": targetId, "data-name": snap.name },
+        h("td", { class: "mono", title: info.received_uuid ? `UUID ${info.received_uuid}` : "" }, snap.name,
           snap.name === parent ? h("span", { class: "pill accent tag" }, t("next_parent")) : null),
         // to the second when the PC reports it, else to the minute of the name;
         // the receive on the NAS goes in the tooltip
@@ -401,15 +409,7 @@ function snapshotTable(targetId, targetPath, group) {
         h("td", {}, snapshotState(snap)),
         hasSource ? h("td", {}, snap.on_source ? h("span", { class: "pill ok" }, t("yes")) : "—") : null,
         hasUsage ? h("td", { class: "num" }, bytes(snap.usage && snap.usage.exclusive)) : null,
-        h("td", { class: "mono", title: info.received_uuid || "" }, info.received_uuid ? info.received_uuid.slice(0, 8) + "…" : "—"),
-        h("td", { class: "actions" },
-          // only a read-only snapshot holds still: the NAS refuses to browse the others
-          !info.readonly ? null : h("button", {
-            class: "btn small",
-            onclick: () => go({ target: targetId, group: group.summary.subvolume, snapshot: snap.name }),
-          }, icon("browse"), t("browse")),
-          snap.problem === "not_subvolume" ? null : fileStationButton(`${targetPath}/${snap.name}`, true),
-          h("span", { class: "del-cell" }, deleteControl(targetId, snap))));
+        h("td", { class: "actions" }, rowActions(targetId, targetPath, group.summary.subvolume, snap)));
     }))));
 }
 
@@ -424,44 +424,82 @@ let queueRunning = false;
 let queueTimer = null;
 
 const queueKey = (target, name) => `${target}|${name}`;
-const queued = (target, name) => queue.find((q) => q.key === queueKey(target, name) && q.status !== "cancelled");
+// the latest request for that snapshot; a failed one can be asked again
+const queued = (target, name) => queue.findLast((q) => q.key === queueKey(target, name) && q.status !== "cancelled");
+const pending = (item) => Boolean(item) && (item.status === "waiting" || item.status === "deleting");
 const allowedDeletion = (snap) => snap.deletion === "allowed" || snap.deletion === "allowed_incomplete";
 
 const DELETION_REASON = {
   parent: "del_parent", newer: "del_newer", parent_unknown: "del_unknown",
-  no_common_parent: "del_no_common", receiving: "del_receiving", not_subvolume: "del_not_subvolume",
+  no_common_parent: "del_no_common", receiving: "del_receiving", not_subvolume: "del_not_subvolume", not_received: "del_not_received",
 };
 
-function deleteControl(targetId, snap) {
+// The buttons of a snapshot's row; while it is in the deletion queue, its
+// state in their place (same width: the column does not move).
+const rowSnaps = new Map();
+
+function rowActions(targetId, targetPath, groupName, snap) {
+  rowSnaps.set(queueKey(targetId, snap.name), { targetId, targetPath, groupName, snap });
   const item = queued(targetId, snap.name);
-  if (item) return queueBadge(item);
+  if (item && item.status !== "error") return queueBadge(item);
+  const info = snap.info || {};
+  return [
+    // only a read-only snapshot holds still: the NAS refuses to browse the others
+    !info.readonly ? h("span", { class: "btn-gap" }) : h("button", {
+      class: "btn small icon", title: t("browse"), "aria-label": t("browse"),
+      onclick: () => go({ target: targetId, group: groupName, snapshot: snap.name }),
+    }, icon("browse")),
+    snap.problem === "not_subvolume" ? h("span", { class: "btn-gap" }) : fileStationButton(`${targetPath}/${snap.name}`, true),
+    deleteControl(targetId, snap),
+  ];
+}
+
+function deleteControl(targetId, snap) {
   if (!allowedDeletion(snap)) {
     const reason = DELETION_REASON[snap.deletion];
     return h("span", { class: "lock", title: reason ? t(reason) : "" }, icon("lock"));
   }
   return h("button", {
-    class: "btn small danger", title: t("delete"),
+    class: "btn small icon danger", title: t("delete"), "aria-label": t("delete"),
     onclick: () => enqueue(targetId, snap.name),
   }, icon("trash"));
 }
 
 function queueBadge(item) {
-  const cls = { waiting: "neutral", deleting: "accent", done: "ok", error: "critical" }[item.status];
-  const text = item.status === "waiting"
-    ? t("q_waiting", { s: Math.max(1, Math.ceil((item.due - Date.now()) / 1000)) })
-    : t(`q_${item.status}`);
-  return h("span", { class: `pill ${cls}`, title: item.error || "" }, text);
+  const cls = { waiting: "warning", deleting: "critical", done: "ok", error: "critical" }[item.status];
+  return h("span", { class: `pill ${cls}`, title: item.error || "", "data-q": item.key }, badgeText(item));
+}
+
+const badgeText = (item) => item.status === "waiting"
+  ? t("q_waiting", { s: Math.max(1, Math.ceil((item.due - Date.now()) / 1000)) })
+  : t(`q_${item.status}`);
+
+// every second while something waits: only the countdowns change, so the
+// rest stays put (and keeps the keyboard focus)
+function tickCountdowns() {
+  for (const el of document.querySelectorAll("[data-q]")) {
+    const item = queue.findLast((q) => q.key === el.dataset.q && q.status === "waiting");
+    if (item) el.textContent = badgeText(item);
+  }
 }
 
 function enqueue(target, name) {
-  if (queued(target, name)) return;
-  queue.push({ key: queueKey(target, name), target, name, status: "waiting", due: Date.now() + GRACE_MS });
+  if (pending(queued(target, name))) return;
+  // the folder's path goes with the request: the NAS refuses it if the
+  // settings changed meanwhile and the number now names another folder
+  const path = state.overview && (state.overview.targets.find((x) => x.id === target) || {}).path;
+  queue.push({ key: queueKey(target, name), target, path, name, status: "waiting", due: Date.now() + GRACE_MS });
   refreshQueueViews();
   pumpQueue();
 }
 
 function cancelItem(item) {
   if (item.status === "waiting") item.status = "cancelled";
+  refreshQueueViews();
+}
+
+function cancelAll() {
+  for (const item of queue) if (item.status === "waiting") item.status = "cancelled";
   refreshQueueViews();
 }
 
@@ -473,14 +511,14 @@ async function pumpQueue() {
   const next = waiting.find((q) => q.due <= Date.now());
   if (!next) {
     // tick every second: the countdowns are on screen
-    queueTimer = setTimeout(() => { refreshQueueViews(); pumpQueue(); }, 1000);
+    queueTimer = setTimeout(() => { tickCountdowns(); pumpQueue(); }, 1000);
     return;
   }
   queueRunning = true;
   next.status = "deleting";
   refreshQueueViews();
   try {
-    await api("delete", {}, { id: next.target, snapshot: next.name });
+    await api("delete", {}, { id: next.target, path: next.path, snapshot: next.name });
     next.status = "done";
   } catch (err) {
     next.status = "error";
@@ -501,9 +539,9 @@ async function pumpQueue() {
 /** Updates the delete cells of the table on screen and the queue panel. */
 function refreshQueueViews() {
   for (const row of document.querySelectorAll("tr[data-name]")) {
-    const cell = row.querySelector(".del-cell");
-    const snap = { name: row.dataset.name, deletion: row.dataset.deletion };
-    if (cell) cell.replaceChildren(deleteControl(Number(row.dataset.target), snap));
+    const cell = row.querySelector("td.actions");
+    const r = rowSnaps.get(queueKey(Number(row.dataset.target), row.dataset.name));
+    if (cell && r) cell.replaceChildren(...[rowActions(r.targetId, r.targetPath, r.groupName, r.snap)].flat());
   }
   const bulk = document.getElementById("bulk-delete");
   if (bulk && bulkContext) bulk.replaceWith(bulkDelete(bulkContext.targetId, bulkContext.group));
@@ -513,6 +551,7 @@ function refreshQueueViews() {
 function renderQueuePanel() {
   let panel = document.getElementById("queue");
   const visible = queue.filter((q) => q.status !== "cancelled");
+  document.body.classList.toggle("queue-open", visible.length > 0);
   if (!visible.length) {
     if (panel) panel.remove();
     return;
@@ -526,8 +565,8 @@ function renderQueuePanel() {
     h("div", { class: "queue-head" },
       h("strong", {}, t("queue_title")),
       busy
-        ? h("button", { class: "btn small", onclick: () => { visible.forEach(cancelItem); } }, t("cancel_all"))
-        : h("button", { class: "btn small", onclick: () => { queue.length = 0; renderQueuePanel(); } }, t("clear"))),
+        ? h("button", { class: "btn small", onclick: cancelAll }, t("cancel_all"))
+        : h("button", { class: "btn small", onclick: () => { queue.length = 0; refreshQueueViews(); } }, t("clear"))),
     h("div", { class: "queue-list" }, visible.map((item) =>
       h("div", { class: "queue-item" },
         h("span", { class: "mono" }, item.name),
@@ -546,16 +585,14 @@ let bulkContext = null;
 
 function bulkDelete(targetId, group) {
   bulkContext = { targetId, group };
-  const old = group.snapshots.filter((s) => allowedDeletion(s) && !queued(targetId, s.name));
-  if (!old.length) return h("div", { id: "bulk-delete" });
+  const old = group.snapshots.filter((s) => allowedDeletion(s) && (queued(targetId, s.name) || { status: "error" }).status === "error");
+  if (!old.length) return h("span", { id: "bulk-delete" });
   // oldest first: if the queue is stopped half way, what is left is the newest
   const names = old.map((s) => s.name).reverse();
-  return h("div", { id: "bulk-delete", class: "toolbar" }, h("span"),
-    h("button", {
-      class: "btn danger",
-      onclick: () => names.forEach((n) => enqueue(targetId, n)),
-    },
-      icon("trash"), t("delete_old", { n: old.length })));
+  return h("button", {
+    id: "bulk-delete", class: "btn small danger",
+    onclick: () => names.forEach((n) => enqueue(targetId, n)),
+  }, icon("trash"), t("delete_old", { n: old.length }));
 }
 
 const SETUP_COMMAND = "sudo /var/packages/btrbk-nas/target/bin/btrbk-nas setup";
@@ -598,12 +635,13 @@ async function loadDetail(id, force = false) {
   return state.detail;
 }
 
-async function renderTarget(route) {
+async function renderTarget(route, seq) {
   const ov = state.overview;
   const target = ov.targets.find((x) => x.id === route.target);
   if (!target) return go({ target: ov.targets[0].id });
   showLoading();
   const detail = await loadDetail(route.target);
+  if (seq !== renderSeq) return;
   const groupName = route.group && detail.groups.some((g) => g.summary.subvolume === route.group)
     ? route.group : detail.groups[0] && detail.groups[0].summary.subvolume;
   const group = detail.groups.find((g) => g.summary.subvolume === groupName);
@@ -619,12 +657,14 @@ async function renderTarget(route) {
     detail.groups.length ? [h("h2", { class: "section" }, t("history")), timeline(detail.groups)] : null,
     group ? [
       h("h2", { class: "section" }, t("snapshots")),
-      h("div", { class: "tabs" }, detail.groups.map((g) =>
-        h("button", {
-          class: `tab${g.summary.subvolume === groupName ? " active" : ""}`,
-          onclick: () => go({ target: route.target, group: g.summary.subvolume }),
-        }, `${g.summary.subvolume} (${g.summary.count})`))),
-      bulkDelete(route.target, group),
+      h("div", { class: "tabs-row" },
+        h("div", { class: "tabs", role: "tablist" }, detail.groups.map((g) =>
+          h("button", {
+            class: `tab${g.summary.subvolume === groupName ? " active" : ""}`, role: "tab",
+            "aria-selected": String(g.summary.subvolume === groupName),
+            onclick: () => go({ target: route.target, group: g.summary.subvolume }),
+          }, `${g.summary.subvolume} (${g.summary.count})`))),
+        bulkDelete(route.target, group)),
       snapshotTable(route.target, detail.path, group),
     ] : null,
   );
@@ -651,18 +691,36 @@ function openInFileStation(path, isDir) {
   window.open(`/?launchApp=${app}&launchParam=${encodeURIComponent(`openfile=${encodeURIComponent(openfile)}`)}`, "_blank");
 }
 
-function fileStationButton(path, isDir, label) {
-  const fsPath = fileStationPath(path);
-  return fsPath === null ? null : h("button", {
-    class: label ? "btn" : "btn small", title: t("file_station"),
-    onclick: (ev) => { ev.stopPropagation(); openInFileStation(fsPath, isDir); },
-  }, icon("share"), label || null);
+// SynoFile, when the NAS has it (0.8.11 or later), names paths the same way.
+const useSynoFile = () => Boolean(state.overview && state.overview.synofile);
+
+function openInSynoFile(path, isDir) {
+  // a file: its folder, with the file selected
+  const params = isDir ? { path } : { path: path.replace(/\/[^/]*$/, "") || "/", select: path.replace(/^.*\//, "") };
+  const app = "SYNO.SDS.SynoFile.Instance";
+  try {
+    const sds = window.parent !== window && window.parent.SYNO && window.parent.SYNO.SDS;
+    if (sds && sds.AppLaunch) return sds.AppLaunch(app, params);
+  } catch (e) { /* not inside DSM */ }
+  window.open(`../synofile/index.html?${new URLSearchParams(params)}`, "_blank");
 }
 
-async function renderBrowse(route) {
+function fileStationButton(path, isDir, labelled = false) {
+  const fsPath = fileStationPath(path);
+  if (fsPath === null) return null;
+  const synofile = useSynoFile();
+  const text = t(synofile ? "synofile" : "file_station");
+  return h("button", {
+    class: labelled ? "btn" : "btn small icon", title: text, "aria-label": text,
+    onclick: (ev) => { ev.stopPropagation(); (synofile ? openInSynoFile : openInFileStation)(fsPath, isDir); },
+  }, icon("share"), labelled ? text : null);
+}
+
+async function renderBrowse(route, seq) {
   showLoading();
   const detail = await loadDetail(route.target);
   const listing = await api("browse", { id: route.target, snapshot: route.snapshot, path: route.path });
+  if (seq !== renderSeq) return;
   const parts = route.path.split("/").filter(Boolean);
   const at = (n) => ({ ...route, path: parts.slice(0, n).join("/") });
 
@@ -679,12 +737,14 @@ async function renderBrowse(route) {
   const join = (name) => (route.path ? `${route.path}/${name}` : name);
   const base = `${detail.path}/${route.snapshot}`;
 
-  const tbody = h("tbody");
-  const fill = (filter) => {
-    const f = filter.toLowerCase();
-    const rows = listing.entries.filter((e) => !f || e.name.toLowerCase().includes(f)).map((e) => {
+  // the rows are built once; the filter only hides them (up to 10,000)
+  const rows = listing.entries.map((e) => {
       const open = e.kind === "dir" ? () => go({ ...route, path: join(e.name) }) : null;
-      return h("tr", { class: open ? "entry" : "", onclick: open },
+      const row = h("tr", {
+        class: open ? "entry" : "", onclick: open,
+        tabindex: open ? "0" : null,
+        onkeydown: open ? (ev) => { if (ev.key === "Enter" && ev.target === row) open(); } : null,
+      },
         h("td", { class: "name-cell" },
           h("span", { class: `entry-name ${e.kind}` },
             icon(e.kind === "dir" ? "folder" : e.kind === "symlink" ? "link" : e.kind === "file" ? "file" : "other"),
@@ -697,18 +757,31 @@ async function renderBrowse(route) {
         h("td", { class: "actions" },
           e.kind === "file" || e.kind === "dir"
             ? h("a", {
-              class: "btn small", href: download(join(e.name)), download: "",
+              class: "btn small icon", href: download(join(e.name)), download: "",
               title: e.kind === "dir" ? t("download_dir") : t("download"),
+              "aria-label": e.kind === "dir" ? t("download_dir") : t("download"),
               onclick: (ev) => ev.stopPropagation(),
-            }, icon("download"), e.kind === "dir" ? ".tar" : "")
+            }, icon("download"))
             : null,
           e.kind === "file" || e.kind === "dir"
             ? fileStationButton(`${base}/${join(e.name)}`, e.kind === "dir")
             : null));
-    });
-    tbody.replaceChildren(...(rows.length ? rows : [h("tr", {}, h("td", { colspan: 6, class: "muted" }, t("empty_dir")))]));
+      row.dataset.key = e.name.toLowerCase();
+      return row;
+  });
+  const empty = h("tr", {}, h("td", { colspan: 6, class: "muted" }, t("empty_dir")));
+  const tbody = h("tbody", {}, ...rows, empty);
+  const fill = (filter) => {
+    const f = filter.toLowerCase();
+    let shown = 0;
+    for (const row of rows) {
+      row.hidden = Boolean(f) && !row.dataset.key.includes(f);
+      if (!row.hidden) shown++;
+    }
+    empty.hidden = shown > 0;
   };
   fill("");
+  let filterTimer = null;
 
   setContent(
     h("div", { class: "page-head" },
@@ -716,8 +789,8 @@ async function renderBrowse(route) {
       h("button", { class: "btn", onclick: () => go({ target: route.target, group: route.group }) }, icon("back"), t("snapshots"))),
     crumbs,
     h("div", { class: "toolbar" },
-      h("input", { class: "filter", type: "search", placeholder: t("filter"), oninput: (ev) => fill(ev.target.value) }),
-      fileStationButton(route.path ? `${base}/${route.path}` : base, true, t("file_station")),
+      h("input", { class: "filter", type: "search", placeholder: t("filter"), oninput: (ev) => { clearTimeout(filterTimer); filterTimer = setTimeout(() => fill(ev.target.value), 120); } }),
+      fileStationButton(route.path ? `${base}/${route.path}` : base, true, true),
       h("a", { class: "btn", href: download(route.path), download: "" }, icon("download"), t("download_dir"))),
     listing.truncated ? h("div", { class: "banner warning" }, t("truncated")) : null,
     h("div", { class: "table-wrap" }, h("table", {},
@@ -742,7 +815,7 @@ function targetRow(target = { label: "", path: "", notify: true }) {
   const row = h("div", { class: "target-card" },
     h("div", { class: "target-row" },
       h("input", { class: "label", placeholder: t("label"), value: target.label || "" }),
-      h("input", { class: "path", placeholder: "/volume1/backup/PC-btrfs", value: target.path || "", required: true }),
+      h("input", { class: "path", placeholder: "/volume1/backup/PC-btrfs", value: target.path || "" }),
       h("button", { type: "button", class: "btn danger", onclick: () => row.remove() }, t("remove"))),
     h("div", { class: "target-options" },
       h("label", { class: "check" },
@@ -883,7 +956,10 @@ async function sendTest() {
 async function saveSettings(ev) {
   ev.preventDefault();
   const error = $("settings-error");
+  const submit = ev.submitter || $("settings-form").querySelector('[type="submit"]');
+  if (submit && submit.disabled) return;
   error.textContent = "";
+  if (submit) submit.disabled = true;
   try {
     await api("settings", {}, readSettings());
     dialog().close();
@@ -892,6 +968,8 @@ async function saveSettings(ev) {
     await refresh();
   } catch (err) {
     error.textContent = err.message;
+  } finally {
+    if (submit) submit.disabled = false;
   }
 }
 
@@ -907,13 +985,18 @@ async function render() {
       h("button", { class: "btn primary", onclick: openSettings }, t("open_settings")));
   }
   if (route.target === null || Number.isNaN(route.target)) return go({ target: ov.targets[0].id });
+  const seq = ++renderSeq;
   try {
-    if (route.snapshot) await renderBrowse(route);
-    else await renderTarget(route);
+    if (route.snapshot) await renderBrowse(route, seq);
+    else await renderTarget(route, seq);
   } catch (err) {
-    showError(err);
+    if (seq === renderSeq) showError(err);
   }
 }
+
+// a slow answer must not draw over the page navigated to meanwhile: the
+// renderers stop after each wait when a newer render started
+let renderSeq = 0;
 
 // The DSM desktop keeps the loader of the build it started with, so after
 // an upgrade the window can open the old index.html, still in the browser's
@@ -945,7 +1028,7 @@ async function refresh() {
     state.overview = await api("overview");
     if (staleVersion(state.overview.asset)) return;
     const theme = state.overview.theme;
-    if ((theme === "light" || theme === "dark") && theme !== document.documentElement.dataset.theme) setTheme(theme);
+    if (!themeSaving && (theme === "light" || theme === "dark") && theme !== document.documentElement.dataset.theme) setTheme(theme);
     state.detail = null;
     document.getElementById("user").textContent = state.overview.user;
     await render();
@@ -963,6 +1046,7 @@ async function refresh() {
 // NAS keeps the choice for each admin, the browser a copy to paint the
 // first frame with: it can lose it (site data cleared on exit).
 const THEME_KEY = "btrbk-nas.theme";
+let themeSaving = null;
 
 function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
@@ -999,12 +1083,19 @@ function showTheme() {
 function toggleTheme() {
   const next = currentTheme() === "dark" ? "light" : "dark";
   setTheme(next);
-  api("theme", {}, { theme: next }).catch(showError);
+  // a cosmetic setting: a failed save is a note, not an error page
+  themeSaving = api("theme", {}, { theme: next })
+    .catch((err) => toast(err.message, true))
+    .finally(() => { themeSaving = null; });
 }
+
 
 // index.html set the stored theme already, before the first paint
 
 async function init() {
+  // page and script of different builds: reload before touching the page,
+  // which may lack what this script expects
+  if (staleVersion(new URLSearchParams(ASSET_VERSION).get("v"))) return;
   await loadTexts();
   document.documentElement.lang = LANG;
   const languages = document.getElementById("n-language");
@@ -1022,6 +1113,8 @@ async function init() {
   document.getElementById("n-test").addEventListener("click", sendTest);
   for (const id of ["n-enabled", "n-desktop", "n-webhook"]) document.getElementById(id).addEventListener("change", syncDisabled);
   document.getElementById("settings-cancel").addEventListener("click", () => dialog().close());
+  document.getElementById("settings-close").addEventListener("click", () => dialog().close());
+  document.getElementById("sidebar").setAttribute("aria-label", t("targets"));
   document.getElementById("settings-form").addEventListener("submit", saveSettings);
   window.addEventListener("hashchange", render);
   loadSynoToken().then(refresh);

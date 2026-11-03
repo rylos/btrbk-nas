@@ -20,14 +20,14 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn from_env() -> io::Result<Self> {
+    pub fn from_env() -> Result<Self, ApiError> {
         let method = env::var("REQUEST_METHOD").unwrap_or_else(|_| "GET".into());
         let route = env::var("PATH_INFO").unwrap_or_default().trim_matches('/').to_string();
         let query = parse_query(&env::var("QUERY_STRING").unwrap_or_default());
         let content_type = env::var("CONTENT_TYPE").unwrap_or_default();
         let length: usize = env::var("CONTENT_LENGTH").ok().and_then(|l| l.parse().ok()).unwrap_or(0);
         if length > MAX_BODY {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, crate::lang::t!("richiesta troppo grande", "request body too large")));
+            return Err(ApiError::new(413, crate::lang::t!("richiesta troppo grande", "request body too large")));
         }
         let mut body = vec![0; length];
         io::stdin().read_exact(&mut body)?;
@@ -125,6 +125,7 @@ fn reason(status: u16) -> &'static str {
         404 => "Not Found",
         405 => "Method Not Allowed",
         409 => "Conflict",
+        413 => "Content Too Large",
         502 => "Bad Gateway",
         _ => "Internal Server Error",
     }

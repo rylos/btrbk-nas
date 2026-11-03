@@ -162,15 +162,20 @@ pub fn list(dir: &File) -> Result<Listing, ApiError> {
     if !dir.metadata()?.is_dir() {
         return Err(ApiError::bad_request(t!("non è una cartella", "not a directory")));
     }
-    let mut entries = Vec::new();
-    let mut truncated = false;
     // entries are read relative to the open directory, never followed
+    let mut found = Vec::new();
     for entry in fs::read_dir(fd_path(dir))? {
-        if entries.len() == MAX_ENTRIES {
-            truncated = true;
-            break;
-        }
         let entry = entry?;
+        let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
+        found.push((!is_dir, entry.file_name().to_string_lossy().to_lowercase(), entry));
+    }
+    // sorted before the cut: a huge directory shows its first names, not
+    // whichever the disk returned first
+    let truncated = found.len() > MAX_ENTRIES;
+    found.sort_unstable_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1)));
+    found.truncate(MAX_ENTRIES);
+    let mut entries = Vec::with_capacity(found.len());
+    for (_, _, entry) in found {
         let Ok(meta) = entry.metadata() else { continue };
         let kind = kind(&meta);
         let link = (kind == Kind::Symlink)

@@ -23,12 +23,26 @@ fn overview(config: &Config, user: &str) -> serde_json::Value {
         "user": user,
         "capabilities": crate::caps::granted(),
         "credits": config.show_credits,
+        "synofile": synofile(),
         "theme": themes().remove(&user.to_lowercase()),
         "asset": option_env!("BTRBK_NAS_ASSET").unwrap_or("dev"),
         "now": now,
         "monitor": monitor_status(config),
         "targets": report::assess_all(config, now),
     })
+}
+
+/// Whether folders open in SynoFile instead of File Station: from 0.8.11 it
+/// takes the folder to open when launched.
+fn synofile() -> bool {
+    let info = std::fs::read_to_string("/var/packages/synofile/INFO").unwrap_or_default();
+    info.lines().find_map(|l| l.strip_prefix("version=")).is_some_and(|v| at_least(v.trim_matches('"'), &[0, 8, 11]))
+}
+
+/// "0.8.11-0001" >= [0, 8, 11]; the build number does not count.
+fn at_least(version: &str, min: &[u64]) -> bool {
+    let parts: Vec<u64> = version.split('-').next().unwrap_or("").split('.').map_while(|p| p.parse().ok()).collect();
+    parts.as_slice() >= min
 }
 
 /// Whether the periodic check runs, and when it last looked.
@@ -119,19 +133,28 @@ fn delete_snapshot(config: &Config, request: &Request, user: &str) -> Result<ser
     #[derive(serde::Deserialize)]
     struct Body {
         id: usize,
+        // the folder the page meant: the id is a position in the settings,
+        // which may have changed since the page was drawn
+        path: Option<std::path::PathBuf>,
         snapshot: String,
     }
     let body: Body =
         serde_json::from_slice(&request.body).map_err(|e| ApiError::bad_request(t!("richiesta non valida: {}", "invalid request: {}", e)))?;
     let target =
         config.targets.get(body.id).ok_or_else(|| ApiError::not_found(t!("cartella di backup inesistente", "no such target")))?;
+    if body.path.as_ref().is_some_and(|p| *p != target.path) {
+        return Err(ApiError::new(
+            409,
+            t!("le cartelle di backup sono cambiate: ricarica la pagina", "the backup folders have changed: reload the page"),
+        ));
+    }
     let lock = config::var_dir().join("delete.lock");
     match snapshot::delete(&target.path, &body.snapshot, &lock) {
         Ok(()) => {
             monitor::log(&format!("{user} deleted {}/{}", target.path.display(), body.snapshot));
             Ok(json!({ "deleted": body.snapshot }))
         }
-        Err(reason) => Err(ApiError::new(409, reason)),
+        Err(e) => Err(ApiError::new(e.status(), e.to_string())),
     }
 }
 
@@ -166,6 +189,9 @@ fn save_theme(request: &Request, user: &str) -> Result<serde_json::Value, ApiErr
     if body.theme != "light" && body.theme != "dark" {
         return Err(ApiError::bad_request(t!("tema non valido", "invalid theme")));
     }
+    // two windows saving at once: one read-modify-write at a time, or a
+    // theme saved by one is lost to the other
+    let _lock = config::lock(&config::var_dir().join("themes.lock"))?;
     let mut all = themes();
     all.insert(user.to_lowercase(), body.theme);
     config::write_atomic(&config::var_dir().join("themes.json"), &serde_json::to_vec(&all).map_err(io::Error::other)?)?;
@@ -189,7 +215,16 @@ fn route(request: &Request, out: &mut impl Write) -> Result<(), ApiError> {
     let user = crate::auth::require_admin()?;
     crate::caps::limit(capabilities(&request.method, &request.route))?;
     let config_path = Config::path();
-    let mut config = Config::load(&config_path)?;
+    let mut config = match Config::load(&config_path) {
+        Ok(config) => config,
+        // saving replaces the file whole: broken settings must not stop the
+        // way out of them
+        Err(e) if request.method == "POST" && request.route == "settings" => {
+            monitor::log(&format!("settings unreadable, saved over: {e}"));
+            Config::default()
+        }
+        Err(e) => return Err(e.into()),
+    };
 
     let writes = request.method == "POST";
     if writes && !request.content_type.starts_with("application/json") {
@@ -239,19 +274,56 @@ fn capabilities(method: &str, route: &str) -> u64 {
     }
 }
 
+/// The reply, noting whether any of it has been written: from then on an
+/// error can no longer be answered as an error.
+struct Reply<W: Write> {
+    out: W,
+    started: bool,
+}
+
+impl<W: Write> Write for Reply<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.started |= !buf.is_empty();
+        self.out.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.out.flush()
+    }
+}
+
 /// Serves one CGI request.
 pub fn serve() -> io::Result<()> {
     // nothing runs with the capabilities before the login check
     crate::caps::suspend()?;
     let stdout = io::stdout();
-    let mut out = BufWriter::with_capacity(256 * 1024, stdout.lock());
-    let result = Request::from_env().map_err(ApiError::from).and_then(|request| {
+    let mut reply = Reply { out: BufWriter::with_capacity(256 * 1024, stdout.lock()), started: false };
+    let result = Request::from_env().and_then(|request| {
         crate::lang::set(request.param("lang"));
-        route(&request, &mut out)
+        route(&request, &mut reply)
     });
-    if let Err(err) = result {
-        cgi::error(&mut out, &err)?;
+    match result {
+        Ok(()) => {}
+        // a download already under way: an error reply now would end up
+        // inside the file. Cut it short instead, so the browser or tar sees
+        // a truncated download, never a complete-looking one
+        Err(err) if reply.started => monitor::log(&format!("reply cut short: {}", err.message)),
+        Err(err) => cgi::error(&mut reply, &err)?,
     }
-    out.flush()
+    reply.flush()
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::at_least;
+
+    #[test]
+    fn compares_package_versions() {
+        assert!(at_least("0.8.11-0001", &[0, 8, 11]));
+        assert!(at_least("0.9.0-0001", &[0, 8, 11]));
+        assert!(at_least("1.0", &[0, 8, 11]));
+        assert!(!at_least("0.8.10-0003", &[0, 8, 11]));
+        assert!(!at_least("", &[0, 8, 11]));
+    }
+}

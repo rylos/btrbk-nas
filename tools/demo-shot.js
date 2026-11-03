@@ -14,8 +14,8 @@
     });
   }
   if (shot === "queue") {
-    when(() => document.querySelector("tr[data-deletion] .del-cell button"), () => {
-      const buttons = [...document.querySelectorAll('tr[data-deletion="allowed"] .del-cell button')];
+    when(() => document.querySelector("td.actions .btn.danger"), () => {
+      const buttons = [...document.querySelectorAll("td.actions .btn.danger")];
       buttons.slice(-3).forEach((b) => b.click());
       document.querySelector(".tabs, table").scrollIntoView();
     });

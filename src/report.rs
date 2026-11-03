@@ -46,6 +46,11 @@ pub struct GroupSummary {
     pub last_received: Option<i64>,
     /// Interrupted receives: btrbk ignores them, they only take space.
     pub incomplete: usize,
+    /// Names of the incomplete receives surely no longer running: a newer
+    /// complete snapshot exists, or they started over a day ago. Only these
+    /// are notified, not a receive still under way.
+    #[serde(skip)]
+    pub interrupted: Vec<String>,
     /// Directories named like snapshots that are not subvolumes.
     pub not_subvolume: usize,
     pub exclusive_bytes: Option<u64>,
@@ -64,11 +69,31 @@ pub fn summarise(group: &Group, now: i64, thresholds: Thresholds) -> GroupSummar
         oldest: group.subvolumes().next_back().map(|s| s.name.clone()),
         last_received,
         incomplete: group.count(Problem::Incomplete),
+        interrupted: interrupted(group, now),
         not_subvolume: group.count(Problem::NotSubvolume),
         exclusive_bytes: group.exclusive_bytes(),
         status: freshness(last_received, now, thresholds),
         chain: group.chain.clone(),
     }
+}
+
+fn interrupted(group: &Group, now: i64) -> Vec<String> {
+    let mut newer_complete = false;
+    let mut names = Vec::new();
+    // newest first: every complete snapshot seen so far is newer
+    for snap in &group.snapshots {
+        match snap.problem {
+            None => newer_complete = true,
+            Some(Problem::Incomplete) => {
+                let old = snap.info.as_ref().is_some_and(|i| now - i.otime >= snapshot::RECEIVE_GRACE_SECS);
+                if newer_complete || old {
+                    names.push(snap.name.clone());
+                }
+            }
+            Some(Problem::NotSubvolume) => {}
+        }
+    }
+    names
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -184,5 +209,36 @@ mod tests {
         let summary = summarise(&group, 1_000_000, DEFAULT);
         assert_eq!(summary.status, Status::Critical);
         assert_eq!((summary.count, summary.incomplete), (1, 1));
+    }
+
+    #[test]
+    fn tells_interrupted_receives_from_running_ones() {
+        let snap = |name: &str, problem, otime| snapshot::Snapshot {
+            name: name.into(),
+            timestamp: String::new(),
+            problem,
+            info: Some(crate::btrfs::SubvolInfo { otime, ..Default::default() }),
+            usage: None,
+            on_source: None,
+            created: None,
+            deletion: Default::default(),
+        };
+        let now = 10 * snapshot::RECEIVE_GRACE_SECS;
+        let mut group = Group {
+            subvolume: "@".into(),
+            snapshots: vec![
+                // under way: newest, started a minute ago
+                snap("@.4", Some(Problem::Incomplete), now - 60),
+                snap("@.3", None, 0),
+                // a newer complete one exists
+                snap("@.2", Some(Problem::Incomplete), now - 60),
+                snap("@.1", None, 0),
+            ],
+            chain: None,
+        };
+        assert_eq!(interrupted(&group, now), ["@.2"]);
+        // a day later the newest is no longer running either
+        group.snapshots[0].info.as_mut().unwrap().otime = now - snapshot::RECEIVE_GRACE_SECS;
+        assert_eq!(interrupted(&group, now), ["@.4", "@.2"]);
     }
 }

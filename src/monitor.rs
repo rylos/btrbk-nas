@@ -94,6 +94,10 @@ pub struct Seen {
     /// When the current problem was last notified (0: never).
     #[serde(default)]
     pub notified_at: i64,
+    /// Interrupted receives already dealt with (notified, or there while
+    /// notifying them was off), by name; None in files of older versions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interrupted: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -146,19 +150,35 @@ pub fn evaluate(previous: &State, targets: &[TargetSummary], config: &Config, no
                 false
             }
         };
+        let target_key = key(target, "");
+        let before_target = previous.seen.get(&target_key).cloned().unwrap_or_default();
+        // this target's subvolumes as last seen (the target's own entry aside)
+        let subvolumes_before = || {
+            previous.seen.range(target_key.clone()..).take_while(|(k, _)| k.starts_with(&target_key)).filter(|(k, _)| **k != target_key)
+        };
 
-        // a target that cannot be read: one error, no per-subvolume noise
-        if let Some(error) = &target.error {
-            let k = key(target, "");
-            let before = previous.seen.get(&k).cloned().unwrap_or_default();
-            let mut seen = Seen { status: Status::Critical, error: Some(error.clone()), ..before.clone() };
-            if before.error.is_none() {
-                seen.notified_at = if emit(Kind::Error, "", None, 0, error.clone(), false) { now } else { 0 };
-            } else if reminder_due(before.notified_at) && emit(Kind::Error, "", None, 0, error.clone(), true) {
+        // a target that cannot be read, or holds no snapshot at all: one
+        // error, no per-subvolume noise
+        let error = target.error.clone().or_else(|| {
+            target.groups.is_empty().then(|| crate::lang::t!("nessuno snapshot trovato", "no snapshots found"))
+        });
+        if let Some(error) = error {
+            let mut seen = Seen { status: Status::Critical, error: Some(error.clone()), ..before_target.clone() };
+            if before_target.error.is_none() {
+                seen.notified_at = if emit(Kind::Error, "", None, 0, error, false) { now } else { 0 };
+            } else if reminder_due(before_target.notified_at) && emit(Kind::Error, "", None, 0, error, true) {
                 seen.notified_at = now;
             }
-            state.seen.insert(k, seen);
+            // what was seen of the subvolumes stays: readable again, they
+            // are not news
+            for (k, v) in subvolumes_before() {
+                state.seen.insert(k.clone(), v.clone());
+            }
+            state.seen.insert(target_key, seen);
             continue;
+        }
+        if before_target.error.is_some() && before_target.notified_at > 0 {
+            emit(Kind::Recovered, "", None, 0, String::new(), false);
         }
 
         for group in &target.groups {
@@ -166,8 +186,14 @@ pub fn evaluate(previous: &State, targets: &[TargetSummary], config: &Config, no
             let before = previous.seen.get(&k).cloned().unwrap_or_default();
             let hours = group.last_received.map(|last| (now - last) / 3600);
             let full_send = group.chain.as_ref().is_some_and(|c| c.full_send);
-            let mut seen =
-                Seen { status: group.status, incomplete: group.incomplete, full_send, error: None, notified_at: 0 };
+            let mut seen = Seen {
+                status: group.status,
+                incomplete: group.incomplete,
+                full_send,
+                error: None,
+                notified_at: 0,
+                interrupted: None,
+            };
 
             let kind = match group.status {
                 Status::Warning => Some(Kind::Late),
@@ -175,14 +201,19 @@ pub fn evaluate(previous: &State, targets: &[TargetSummary], config: &Config, no
                 Status::Ok => None,
             };
             if group.status > before.status {
-                // got worse: late, or straight to critical
+                // got worse: late, or straight to critical. An earlier
+                // notification still counts for the recovery to come
+                seen.notified_at = before.notified_at;
                 if let Some(kind) = kind
                     && emit(kind, &group.subvolume, hours, 0, String::new(), false)
                 {
                     seen.notified_at = now;
                 }
             } else if group.status == Status::Ok && before.status != Status::Ok {
-                emit(Kind::Recovered, &group.subvolume, hours, 0, String::new(), false);
+                // a recovery from a problem nobody heard of is no news
+                if before.notified_at > 0 {
+                    emit(Kind::Recovered, &group.subvolume, hours, 0, String::new(), false);
+                }
             } else if let Some(kind) = kind {
                 // still a problem (or slightly better): keep the reminder clock
                 seen.notified_at = before.notified_at;
@@ -194,10 +225,27 @@ pub fn evaluate(previous: &State, targets: &[TargetSummary], config: &Config, no
             if full_send && !before.full_send {
                 emit(Kind::FullSend, &group.subvolume, hours, 0, String::new(), false);
             }
-            if group.incomplete > before.incomplete {
-                emit(Kind::Incomplete, &group.subvolume, hours, group.incomplete - before.incomplete, String::new(), false);
+
+            let handled: Vec<String> = match &before.interrupted {
+                Some(names) => names.iter().filter(|n| group.interrupted.contains(n)).cloned().collect(),
+                // an older version counted them, and notified those it saw
+                None if before.incomplete > 0 => group.interrupted.clone(),
+                None => Vec::new(),
+            };
+            let new = group.interrupted.iter().filter(|n| !handled.contains(n)).count();
+            if new > 0 {
+                emit(Kind::Incomplete, &group.subvolume, hours, new, String::new(), false);
             }
+            seen.interrupted = Some(group.interrupted.clone());
             state.seen.insert(k, seen);
+        }
+
+        // gone since the last check: every snapshot of the subvolume was
+        // deleted. Said once, then forgotten
+        for (k, _) in subvolumes_before() {
+            if !state.seen.contains_key(k) {
+                emit(Kind::Critical, &k[target_key.len()..], None, 0, String::new(), false);
+            }
         }
     }
     (state, events)
@@ -237,7 +285,7 @@ impl Event {
         // in the webhook's language, whatever the request asked for
         let previous = crate::lang::code();
         crate::lang::set(Some(language));
-        let hours = self.hours.map(|h| h.to_string()).unwrap_or_else(|| "?".into());
+        let hours = self.hours.map(|h| h.to_string()).unwrap_or_default();
         let (s, t) = (&self.subvolume, &self.target);
         let text = match self.kind {
             Kind::Late => t!(
@@ -247,8 +295,14 @@ impl Event {
                 t,
                 hours
             ),
+            Kind::Critical if self.hours.is_none() => {
+                t!("Nessun backup completo di {} da {}.", "No complete backup of {} from {}.", s, t)
+            }
             Kind::Critical => {
                 t!("Nessun backup completo di {} da {} da {} ore.", "No complete backup of {} from {} for {} hours.", s, t, hours)
+            }
+            Kind::Recovered if s.is_empty() => {
+                t!("I backup di {} sono di nuovo leggibili.", "The backups of {} can be read again.", t)
             }
             Kind::Recovered => {
                 t!("Il backup di {} da {} è di nuovo aggiornato.", "The backup of {} from {} is up to date again.", s, t)
@@ -380,21 +434,30 @@ pub fn send(event: &Event, n: &Notifications) -> io::Result<()> {
 /// One check: assess, compare, notify, save. With `dry_run` nothing is sent
 /// or saved.
 pub fn check(config: &Config, dry_run: bool) -> io::Result<Vec<Event>> {
+    let path = State::path();
+    let (state, events) = check_from(config, &State::load(&path), !dry_run);
+    if !dry_run {
+        state.save(&path)?;
+    }
+    Ok(events)
+}
+
+/// Assesses the targets, compares them with `previous` and, with `notify`,
+/// sends the events. Returns the state to remember.
+fn check_from(config: &Config, previous: &State, notify: bool) -> (State, Vec<Event>) {
     // the details of an error travel in the webhook text: in its language
     crate::lang::set(Some(&config.notifications.language));
     let now = report::now();
     let targets = report::assess_all(config, now);
-    let path = State::path();
-    let (state, events) = evaluate(&State::load(&path), &targets, config, now);
-    if !dry_run {
+    let (state, events) = evaluate(previous, &targets, config, now);
+    if notify {
         for event in &events {
             if let Err(e) = send(event, &config.notifications) {
                 log(&format!("cannot notify {:?} {}/{}: {e}", event.kind, event.target, event.subvolume));
             }
         }
-        state.save(&path)?;
     }
-    Ok(events)
+    (state, events)
 }
 
 pub fn log_path() -> PathBuf {
@@ -439,21 +502,30 @@ pub fn run() -> ! {
     }
     log(&format!("started, version {}", crate::api::VERSION));
     sleep(FIRST_CHECK_DELAY);
+    let path = State::path();
+    // the last state when it could not be saved: kept here, so a full or
+    // read-only disk does not send the same notifications every minute.
+    // Saving before sending would avoid that too, but lose the
+    // notifications themselves for as long as the disk refuses writes
+    let mut unsaved: Option<State> = None;
     loop {
         wait_for_capabilities();
         match Config::load(&Config::path()) {
             Ok(config) if config.notifications.enabled => {
-                let due = State::load(&State::path()).last_check
-                    + i64::from(config.notifications.interval_minutes) * 60;
+                let previous = unsaved.clone().unwrap_or_else(|| State::load(&path));
+                let due = previous.last_check + i64::from(config.notifications.interval_minutes) * 60;
                 if report::now() >= due {
-                    match check(&config, false) {
-                        Ok(events) => {
-                            for e in &events {
-                                log(&format!("notified {:?} {}/{} {}", e.kind, e.target, e.subvolume, e.detail));
-                            }
-                        }
-                        Err(e) => log(&format!("check failed: {e}")),
+                    let (state, events) = check_from(&config, &previous, true);
+                    for e in &events {
+                        log(&format!("notified {:?} {}/{} {}", e.kind, e.target, e.subvolume, e.detail));
                     }
+                    unsaved = match state.save(&path) {
+                        Ok(()) => None,
+                        Err(e) => {
+                            log(&format!("cannot save the state: {e}"));
+                            Some(state)
+                        }
+                    };
                 }
             }
             Ok(_) => {}
@@ -492,6 +564,8 @@ mod tests {
             oldest: None,
             last_received: Some(NOW - hours_ago * HOUR),
             incomplete,
+            // interrupted long ago: notified as soon as seen
+            interrupted: (0..incomplete).map(|i| format!("{subvolume}.2026010{i}")).collect(),
             not_subvolume: 0,
             exclusive_bytes: None,
             status,
@@ -592,6 +666,96 @@ mod tests {
         assert!(e.is_empty());
         let (_, e) = evaluate(&s, &two, &config, NOW + 2 * HOUR);
         assert_eq!((e[0].kind, e[0].count), (Kind::Incomplete, 1));
+    }
+
+    #[test]
+    fn a_receive_under_way_is_not_news() {
+        let config = Config::default();
+        let mut running = group("@", Status::Ok, 2, 1);
+        running.interrupted.clear();
+        let (s, e) = evaluate(&State::default(), &[target(vec![running.clone()])], &config, NOW);
+        assert!(e.is_empty());
+        // finished: nothing to say
+        let (_, e) = evaluate(&s, &[target(vec![group("@", Status::Ok, 1, 0)])], &config, NOW + HOUR);
+        assert!(e.is_empty());
+        // never finished, and a newer complete one arrived: now it is
+        let (s, e) = evaluate(&s, &[target(vec![group("@", Status::Ok, 1, 1)])], &config, NOW + HOUR);
+        assert_eq!((e[0].kind, e[0].count), (Kind::Incomplete, 1));
+        let (_, e) = evaluate(&s, &[target(vec![group("@", Status::Ok, 1, 1)])], &config, NOW + 2 * HOUR);
+        assert!(e.is_empty());
+    }
+
+    #[test]
+    fn reads_the_state_of_older_versions() {
+        let old = r#"{"last_check": 1, "seen": {"/volume2/backup/PC-btrfs\t@": {"status": "ok", "incomplete": 1}}}"#;
+        let s: State = serde_json::from_str(old).unwrap();
+        // the old version counted one and notified it: not again
+        let (s, e) = evaluate(&s, &[target(vec![group("@", Status::Ok, 2, 1)])], &Config::default(), NOW);
+        assert!(e.is_empty());
+        assert_eq!(s.seen.values().next().unwrap().interrupted.as_deref(), Some(&["@.20260100".to_string()][..]));
+    }
+
+    #[test]
+    fn recovers_only_from_what_was_notified() {
+        let mut config = Config::default();
+        config.notifications.late = false;
+        let late = [target(vec![group("@", Status::Warning, 30, 0)])];
+        let ok = [target(vec![group("@", Status::Ok, 2, 0)])];
+        let (s, e) = evaluate(&State::default(), &late, &config, NOW);
+        assert!(e.is_empty());
+        let (_, e) = evaluate(&s, &ok, &config, NOW + HOUR);
+        assert!(e.is_empty());
+
+        // late notified, critical switched off: the recovery still counts
+        config.notifications.late = true;
+        config.notifications.critical = false;
+        let critical = [target(vec![group("@", Status::Critical, 80, 0)])];
+        let (s, _) = evaluate(&State::default(), &late, &config, NOW);
+        let (s, e) = evaluate(&s, &critical, &config, NOW + HOUR);
+        assert!(e.is_empty());
+        let (_, e) = evaluate(&s, &ok, &config, NOW + 2 * HOUR);
+        assert_eq!(kinds(&e), [(Kind::Recovered, false)]);
+    }
+
+    #[test]
+    fn a_target_without_snapshots_is_an_error() {
+        let config = Config::default();
+        let (s, e) = evaluate(&State::default(), &[target(vec![])], &config, NOW);
+        assert_eq!(kinds(&e), [(Kind::Error, false)]);
+        assert!(e[0].text("en").contains("no snapshots found"));
+        let (_, e) = evaluate(&s, &[target(vec![])], &config, NOW + HOUR);
+        assert!(e.is_empty());
+    }
+
+    #[test]
+    fn says_when_a_subvolume_is_gone() {
+        let config = Config::default();
+        let both = [target(vec![group("@", Status::Ok, 2, 0), group("@home", Status::Ok, 2, 0)])];
+        let one = [target(vec![group("@", Status::Ok, 2, 0)])];
+        let (s, _) = evaluate(&State::default(), &both, &config, NOW);
+        let (s, e) = evaluate(&s, &one, &config, NOW + HOUR);
+        assert_eq!(kinds(&e), [(Kind::Critical, false)]);
+        assert_eq!((e[0].subvolume.as_str(), e[0].hours), ("@home", None));
+        assert_eq!(e[0].text("en"), "No complete backup of @home from PC.");
+        // said once
+        let (_, e) = evaluate(&s, &one, &config, NOW + 2 * HOUR);
+        assert!(e.is_empty());
+    }
+
+    #[test]
+    fn readable_again_is_a_recovery_not_news() {
+        let config = Config::default();
+        let late = [target(vec![group("@", Status::Warning, 30, 1)])];
+        let (s, _) = evaluate(&State::default(), &late, &config, NOW);
+        let mut broken = target(vec![]);
+        broken.error = Some("Permission denied".into());
+        let (s, e) = evaluate(&s, &[broken], &config, NOW + HOUR);
+        assert_eq!(kinds(&e), [(Kind::Error, false)]);
+        // the subvolume was late and had its incomplete receive before: only
+        // the recovery of the target is new
+        let (_, e) = evaluate(&s, &late, &config, NOW + 2 * HOUR);
+        assert_eq!(kinds(&e), [(Kind::Recovered, false)]);
+        assert_eq!(e[0].text("en"), "The backups of PC can be read again.");
     }
 
     #[test]

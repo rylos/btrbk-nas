@@ -1,3 +1,18 @@
+v0.5.0
+- Folders and files open in SynoFile (0.8.11 or later) when it is installed, instead of File Station; a file opens in its folder, selected.
+- Snapshot table: every column fits the DSM window; the row buttons are icons of one size, the UUID is in the name's tooltip, and a queued deletion shows in place of the buttons.
+- Settings: Save and Cancel always in view at the bottom, a close button at the top.
+- Light theme: darker orange, green and grey text, readable on their backgrounds; fields and buttons of one height; a focus ring for the keyboard; folders and cards open from the keyboard too.
+- Phone width: page headers, file names and the settings rows no longer overflow.
+- A deletion in the queue is refused if the backup folders changed meanwhile, instead of reaching another folder.
+- A snapshot whose deletion failed can be deleted again; the countdown no longer redraws the table every second.
+- A slow answer no longer draws over the page opened meanwhile; filtering a big folder is smooth.
+- A download that breaks half way is left truncated instead of looking complete.
+- Notifications: no repeats when the state cannot be saved, no alert for a receive still running, alerts for a folder left without snapshots or a vanished subvolume, "readable again" after an error, "up to date again" only after an alert.
+- Read-only snapshots taken on the NAS itself are not taken for incomplete receives, and are not offered for deletion.
+- Snapshots sort by their time across time zones and DST changes.
+- The 30-day history no longer shifts by a day after the spring clock change; sizes use the language's decimal separator.
+
 v0.4.8
 - Snapshot list: the Delete button lines up with the other buttons in the row (it sat lower in Firefox).
 

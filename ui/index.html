@@ -47,7 +47,11 @@
 
 <dialog id="settings" class="dialog">
   <form method="dialog" id="settings-form">
-    <h2 data-i18n="settings"></h2>
+    <div class="dialog-head">
+      <h2 data-i18n="settings"></h2>
+      <button type="button" class="icon-btn" id="settings-close" data-i18n-title="cancel"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="dialog-body">
     <section>
       <h3 data-i18n="targets"></h3>
       <p class="hint" data-i18n="targets_hint"></p>
@@ -71,7 +75,7 @@
       <label class="check strong"><input type="checkbox" id="n-enabled"> <span data-i18n="n_enabled"></span></label>
       <div id="notify-options" class="notify-options">
         <label class="inline"><span data-i18n="every"></span>
-          <input type="number" min="5" max="1440" id="n-interval"> <span data-i18n="minutes"></span></label>
+          <input type="number" min="5" max="1440" id="n-interval" required> <span data-i18n="minutes"></span></label>
         <div class="subhead" data-i18n="events"></div>
         <div class="checks">
           <label class="check"><input type="checkbox" id="n-late"> <span data-i18n="ev_late"></span></label>
@@ -107,6 +111,7 @@
       <label class="check"><input type="checkbox" id="show-credits"> <span data-i18n="show_credits"></span></label>
     </section>
     <p class="form-error" id="settings-error"></p>
+    </div>
     <div class="dialog-actions">
       <button type="button" class="btn" id="settings-cancel" data-i18n="cancel"></button>
       <button type="submit" class="btn primary" id="settings-save" data-i18n="save"></button>

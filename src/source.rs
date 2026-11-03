@@ -43,12 +43,11 @@ pub fn parse(text: &str) -> Result<Source, String> {
                 source.generated = epoch.parse().map_err(|_| crate::lang::t!("ora di generazione non valida: {}", "bad generated time: {}", epoch))?;
             }
             (Some("snapshot"), Some(uuid), Some(rest)) => {
-                // "<name>" or "<name> <created>"
-                let (name, created) = match rest.split_once(' ') {
-                    Some((name, epoch)) => {
-                        (name, Some(epoch.parse().map_err(|_| crate::lang::t!("ora di creazione non valida: {}", "bad creation time: {}", epoch))?))
-                    }
-                    None => (rest, None),
+                // "<name>" or "<name> <created>": the name may hold spaces, a
+                // snapshot name never ends in a bare number
+                let (name, created) = match rest.rsplit_once(' ').map(|(name, epoch)| (name, epoch.parse::<i64>())) {
+                    Some((name, Ok(created))) => (name, Some(created)),
+                    _ => (rest, None),
                 };
                 source.snapshots.insert(uuid.to_string(), name.to_string());
                 if let Some(created) = created {
@@ -98,6 +97,14 @@ snapshot 33333333-0000-0000-0000-000000000003 @home.20261026T1312 1793020335
     fn refuses_other_files() {
         assert!(parse("hello").is_err());
         assert!(parse("# btrbk-nas source v1\ngenerated soon\n").is_err());
-        assert!(parse("# btrbk-nas source v1\nsnapshot u @.20261026 soon\n").is_err());
+    }
+
+    #[test]
+    fn reads_names_with_spaces() {
+        let source = parse("# btrbk-nas source v1\nsnapshot a my data.20261026 1793020335\nsnapshot b my data.20261027\n").unwrap();
+        assert_eq!(source.snapshots["a"], "my data.20261026");
+        assert_eq!(source.created["a"], 1_793_020_335);
+        assert_eq!(source.snapshots["b"], "my data.20261027");
+        assert!(!source.created.contains_key("b"));
     }
 }

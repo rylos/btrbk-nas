@@ -163,17 +163,33 @@ pub fn var_dir() -> PathBuf {
 /// hold a webhook token.
 pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
     use std::os::unix::fs::OpenOptionsExt;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    // a temporary name of its own: the CGI and the daemon may write at once
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos());
     let mut tmp = path.as_os_str().to_owned();
-    tmp.push(".tmp");
-    // a leftover keeps its old mode: create afresh
-    match fs::remove_file(&tmp) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
-        _ => {}
-    }
+    tmp.push(format!(".{}.{}.{nanos}.tmp", std::process::id(), COUNTER.fetch_add(1, Ordering::Relaxed)));
+    let tmp = PathBuf::from(tmp);
     let mut file = fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&tmp)?;
-    file.write_all(data)?;
-    drop(file);
-    fs::rename(&tmp, path)
+    // on disk before it takes the name: a power cut must not leave an
+    // empty file where the settings were
+    let result = file.write_all(data).and_then(|()| file.sync_all()).and_then(|()| fs::rename(&tmp, path));
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
+}
+
+/// Holds an exclusive lock on `path` (created when missing) until the
+/// returned file is dropped.
+pub fn lock(path: &Path) -> io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let file = fs::OpenOptions::new().create(true).truncate(false).write(true).mode(0o600).open(path)?;
+    // SAFETY: a valid descriptor; the lock goes with the file when dropped
+    if unsafe { libc::flock(std::os::fd::AsRawFd::as_raw_fd(&file), libc::LOCK_EX) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(file)
 }
 
 impl Config {
@@ -281,12 +297,37 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("btrbk-nas-test-atomic-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("config.json");
-        // a leftover temporary file, readable by all, is not reused as it is
+        // a leftover temporary file of an older version, readable by all, is
+        // not reused
         fs::write(dir.join("config.json.tmp"), "old").unwrap();
         fs::set_permissions(dir.join("config.json.tmp"), fs::Permissions::from_mode(0o644)).unwrap();
         write_atomic(&path, b"{}").unwrap();
         assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
         assert_eq!(fs::read(&path).unwrap(), b"{}");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn concurrent_writers_do_not_collide() {
+        let dir = std::env::temp_dir().join(format!("btrbk-nas-test-concurrent-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("themes.json");
+        let writers: Vec<_> = (0..8)
+            .map(|i| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..20 {
+                        write_atomic(&path, format!("writer {i}").as_bytes()).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for writer in writers {
+            writer.join().unwrap();
+        }
+        assert!(String::from_utf8(fs::read(&path).unwrap()).unwrap().starts_with("writer "));
+        // no temporary file left behind
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
         fs::remove_dir_all(dir).unwrap();
     }
 
