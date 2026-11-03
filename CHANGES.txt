@@ -1,3 +1,6 @@
+v0.4.7
+- Buttons in outline style, as in SynoFile: a border and bold text instead of a filled background; the main ones in blue, Delete in red.
+
 v0.4.6
 - The install and upgrade wizard has a step that says to run setup, with the command.
 - CHANGES.txt: the changes of every version.
