@@ -1,3 +1,5 @@
 /target
 /dist
 __pycache__/
+.serena/
+.mcp.json
