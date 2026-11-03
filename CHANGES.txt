@@ -1,3 +1,6 @@
+v0.4.8
+- Snapshot list: the Delete button lines up with the other buttons in the row (it sat lower in Firefox).
+
 v0.4.7
 - Buttons in outline style, as in SynoFile: a border and bold text instead of a filled background; the main ones in blue, Delete in red.
 
